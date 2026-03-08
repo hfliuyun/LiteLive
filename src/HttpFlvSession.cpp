@@ -111,3 +111,16 @@ std::string HttpFlvSession::makeHttpHeader(int status, const std::string& status
         << (keepAlive ? "Connection: keep-alive\r\n" : "Connection: close\r\n") << "\r\n";
     return oss.str();
 }
+void HttpFlvSession::onDisconnect(TcpConnection* conn) {
+    // 因为 HTTP 端目前没存 streamName，可以通过遍历全局流表来踢人
+    for (auto& pair : epollServer_->g_liveStreams) {
+        LiveStream& stream = pair.second;
+        for (auto it = stream.flvSubscribers.begin(); it != stream.flvSubscribers.end(); ++it) {
+            if (*it == conn) {
+                std::cout << ">>> HTTP-FLV 观众离开直播间 [" << pair.first << "]..." << std::endl;
+                stream.flvSubscribers.erase(it);
+                return;
+            }
+        }
+    }
+}

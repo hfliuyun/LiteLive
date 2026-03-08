@@ -79,6 +79,11 @@ void TcpConnection::handleWrite() {
 void TcpConnection::CloseConnection() {
     if (fd_ < 0)
         return;
+    // 通知上层业务进行清理
+    if (session_) {
+        session_->onDisconnect(this);
+    }
+
     close(fd_);
     epoll_ctl(epollServer_->getEpollFd(), EPOLL_CTL_DEL, fd_, nullptr);
     fd_ = -1;

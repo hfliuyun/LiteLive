@@ -31,6 +31,7 @@ class RtmpSession : public Session {
 public:
     void onMessage(TcpConnection* conn, std::string& readBuffer) override;
     void setEpollServer(EpollServer* epollServer) override { epollServer_ = epollServer; }
+    void onDisconnect(TcpConnection* conn) override;
 
 private:
     void sendS0S1S2(TcpConnection* conn, const std::string& c1);

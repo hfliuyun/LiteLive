@@ -734,3 +734,26 @@ std::array<uint8_t, 8> doubleToBigEndian(double value) {
 
     return result;
 }
+void RtmpSession::onDisconnect(TcpConnection* conn) {
+    if (streamName_.empty())
+        return; // 还没建立流就断开了
+
+    LiveStream& stream = epollServer_->g_liveStreams[streamName_];
+
+    if (this->isPublishing_) {
+        std::cout << ">>> 主播 [" << streamName_ << "] 断开连接，直播结束！" << std::endl;
+        stream.publisher = nullptr;
+        // TODO 正常应该把观众也全踢下线并销毁整个 stream，
+        // 目前可以先简单清空缓存
+        stream.gopCache.clear();
+    } else {
+        std::cout << ">>> RTMP 观众离开直播间..." << std::endl;
+        // 从 subscribers 数组中移除这个连接
+        for (auto it = stream.subscribers.begin(); it != stream.subscribers.end(); ++it) {
+            if (*it == conn) {
+                stream.subscribers.erase(it);
+                break;
+            }
+        }
+    }
+}
