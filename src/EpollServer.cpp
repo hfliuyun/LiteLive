@@ -1,20 +1,20 @@
 #include "EpollServer.h"
-#include "Session.h"
-#include "HttpHlsSession.h"
-#include "TcpConnection.h"
 #include "HttpFlvSession.h"
+#include "HttpHlsSession.h"
+#include "RtmpSession.h"
+#include "Session.h"
+#include "TcpConnection.h"
 #include <cstddef>
+#include <fcntl.h>
 #include <memory>
 #include <sys/socket.h>
-#include <fcntl.h>
-#include "RtmpSession.h"
 EpollServer::EpollServer(int port) {
     listenFd_ = socket(AF_INET, SOCK_STREAM, 0);
     if (listenFd_ == -1) {
         std::cerr << "Failed to create socket" << std::endl;
         exit(EXIT_FAILURE);
     }
-        int socket_opt = 1;
+    int socket_opt = 1;
     if (setsockopt(listenFd_, SOL_SOCKET, SO_REUSEADDR, &socket_opt, sizeof(socket_opt)) == -1) {
         std::cerr << "Failed to set socket options" << std::endl;
         exit(EXIT_FAILURE);
@@ -82,14 +82,14 @@ void EpollServer::acceptConnection() {
     int flags = fcntl(clientFd, F_GETFL, 0);
     fcntl(clientFd, F_SETFL, flags | O_NONBLOCK);
 
-    #if 0
+#if 0
     std::shared_ptr<Session> session = std::make_shared<HttpHlsSession>();
     elif 0
     std::shared_ptr<Session> session = std::make_shared<HttpFlvSession>();
-    #else
+#else
     std::shared_ptr<Session> session = nullptr;
-    #endif
-    TcpConnection*conn = new TcpConnection(clientFd, this, session);
+#endif
+    TcpConnection* conn = new TcpConnection(clientFd, this, session);
     connections_[clientFd] = conn;
     epoll_event event{};
     event.events = EPOLLIN | EPOLLET; // 边缘触发
@@ -100,12 +100,12 @@ void EpollServer::acceptConnection() {
     }
 }
 
-void EpollServer::handleClient(int clientFd,epoll_event event) {
+void EpollServer::handleClient(int clientFd, epoll_event event) {
     TcpConnection* conn = connections_[clientFd];
-   if(event.events & EPOLLIN) {
+    if (event.events & EPOLLIN) {
         conn->handldRead();
     }
-    if(event.events & EPOLLOUT) {
+    if (event.events & EPOLLOUT) {
         conn->handleWrite();
     }
 }
@@ -116,4 +116,4 @@ EpollServer::~EpollServer() {
     for (auto& pair : connections_) {
         delete pair.second;
     }
-}   
+}

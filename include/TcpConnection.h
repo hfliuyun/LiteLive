@@ -1,14 +1,14 @@
 #ifndef __TCPCONNECTION_H__
 #define __TCPCONNECTION_H__
 
-#include "sys/socket.h"
+#include "Session.h"
 #include "error.h"
 #include "iostream"
+#include "sys/socket.h"
 #include <cerrno>
 #include <cstdio>
 #include <memory>
 #include <unistd.h>
-#include "Session.h"
 
 class EpollServer;
 class TcpConnection {
@@ -20,9 +20,9 @@ private:
 
     std::shared_ptr<Session> session_;
 
-
 public:
-    TcpConnection(int fd, EpollServer* epollServer, std::shared_ptr<Session> session): fd_(fd), epollServer_(epollServer), session_(session) {};
+    TcpConnection(int fd, EpollServer* epollServer, std::shared_ptr<Session> session)
+        : fd_(fd), epollServer_(epollServer), session_(session) {};
 
     void handldRead();
 

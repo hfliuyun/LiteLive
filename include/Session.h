@@ -1,10 +1,9 @@
-#ifndef  __SESSION_H__
+#ifndef __SESSION_H__
 #define __SESSION_H__
-#include <string>
 #include <memory>
+#include <string>
 class EpollServer;
 class TcpConnection;
-
 
 class Session {
 public:

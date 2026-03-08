@@ -1,0 +1,40 @@
+# .clang-format
+BasedOnStyle: LLVM
+
+# 基本缩进
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+
+# 每行字符限制，120 是现在显示器比较友好的宽度
+ColumnLimit: 120
+
+# 访问修饰符 (public/private) 的偏移，设为 -4 让它们和 class 对齐
+AccessModifierOffset: -4
+
+# 指针/引用对齐方式：靠近类型 (左边) ，比如 int* a, 而不是 int *a
+PointerAlignment: Left
+
+# 允许短代码在一行：只允许内联函数
+AllowShortFunctionsOnASingleLine: InlineOnly
+AllowShortIfStatementsOnASingleLine: false
+AllowShortLoopsOnASingleLine: false
+
+# 尾随注释对齐
+AlignTrailingComments: true
+SpacesBeforeTrailingComments: 1
+
+# 命名空间内不缩进，避免嵌套太深
+NamespaceIndentation: None
+
+# Switch 语句中的 Case 缩进
+IndentCaseLabels: true
+
+# 连续的赋值语句对齐 (a = 1; bbb = 2; 对齐等号)
+AlignConsecutiveAssignments: false
+
+# 连续的变量声明对齐
+AlignConsecutiveDeclarations: false
+
+# 大括号换行风格：附加到当前行 (类似 Java / Google)，但是函数大括号由于基于 LLVM 是不换行的，可以通过 BreakBeforeBraces 调整
+BreakBeforeBraces: Attach

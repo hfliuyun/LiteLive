@@ -1,28 +1,28 @@
 #include "TcpConnection.h"
 #include "EpollServer.h"
-#include <sys/epoll.h>
-#include "Session.h"
-#include "RtmpSession.h"
 #include "HttpFlvSession.h"
+#include "RtmpSession.h"
+#include "Session.h"
+#include <sys/epoll.h>
 void TcpConnection::handldRead() {
     char buf[4096];
-    while(true) {
-        ssize_t  n = read(fd_, buf, sizeof(buf));
-        if(n > 0) {
+    while (true) {
+        ssize_t n = read(fd_, buf, sizeof(buf));
+        if (n > 0) {
             readBuffer_.append(buf, n);
         } else if (n == -1 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
             break;
-        } else if (n ==0) {
+        } else if (n == 0) {
             CloseConnection();
             return;
-        } else  {
+        } else {
             CloseConnection();
             std::cout << " read error" << std::endl;
             return;
         }
     }
-    if(!readBuffer_.empty() && session_ == nullptr) {
-        if(readBuffer_[0] == 0x03) {
+    if (!readBuffer_.empty() && session_ == nullptr) {
+        if (readBuffer_[0] == 0x03) {
             // RTMP 握手协议第一个字节永远是 0x03
             std::cout << ">>> 嗅探到 RTMP 协议连接！" << std::endl;
             session_ = std::make_shared<RtmpSession>();
@@ -42,7 +42,8 @@ void TcpConnection::send(const std::string& data) {
 }
 
 void TcpConnection::handleWrite() {
-    if (writeBuffer_.empty()) return;
+    if (writeBuffer_.empty())
+        return;
 
     while (!writeBuffer_.empty()) {
         ssize_t n = write(fd_, writeBuffer_.data(), writeBuffer_.size());
@@ -67,7 +68,7 @@ void TcpConnection::handleWrite() {
             return;
         }
     }
-    if(writeBuffer_.empty()) {
+    if (writeBuffer_.empty()) {
         epoll_event event{};
         event.events = EPOLLIN;
         event.data.fd = fd_;
@@ -76,7 +77,8 @@ void TcpConnection::handleWrite() {
 }
 
 void TcpConnection::CloseConnection() {
-    if(fd_ < 0) return;
+    if (fd_ < 0)
+        return;
     close(fd_);
     epoll_ctl(epollServer_->getEpollFd(), EPOLL_CTL_DEL, fd_, nullptr);
     fd_ = -1;
