@@ -417,7 +417,7 @@ void RtmpSession::processFullMessage(TcpConnection* conn, const RtmpMessageHeade
             }
         }
 
-        // 2. 【广播！】把这个包原封不动地发给所有观众
+        // 2. 【广播！】把这个包原封不动地发给所有 RTMP 在线观众
         for(TcpConnection* subConn : stream.subscribers) {
             // 直接复用你之前写好的 sendRtmpMessage 函数进行发送端分片下发！
             //TODO（如果在生产环境中，这里要把组装好的二进制 buffer 存下来发，避免每个观众都走一遍切片 CPU 计算。
@@ -428,6 +428,12 @@ void RtmpSession::processFullMessage(TcpConnection* conn, const RtmpMessageHeade
             // 第5个参数是原包的时间戳，第6个参数强制发到 StreamID=1
             sendRtmpMessage(subConn, outCsid, header.messageTypeId, payload, header.timestamp,
                             1);
+        }
+
+        //3. 【新增广播！】封装成 FLV Tag，发给所有 HTTP 网页在线观众！
+        std::string flvTag = makeFlvTag(header.messageTypeId, header.timestamp, payload);
+        for(TcpConnection* flvSubConn : stream.flvSubscribers) {
+            flvSubConn->send(flvTag);
         }
 
 

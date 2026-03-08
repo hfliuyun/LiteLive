@@ -3,6 +3,7 @@
 #include "HttpHlsSession.h"
 #include "TcpConnection.h"
 #include "HttpFlvSession.h"
+#include <cstddef>
 #include <memory>
 #include <sys/socket.h>
 #include <fcntl.h>
@@ -86,8 +87,7 @@ void EpollServer::acceptConnection() {
     elif 0
     std::shared_ptr<Session> session = std::make_shared<HttpFlvSession>();
     #else
-    std::shared_ptr<Session> session = std::make_shared<RtmpSession>();
-    session->setEpollServer(this);
+    std::shared_ptr<Session> session = nullptr;
     #endif
     TcpConnection*conn = new TcpConnection(clientFd, this, session);
     connections_[clientFd] = conn;

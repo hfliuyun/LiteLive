@@ -3,6 +3,7 @@
 
 #include <string>
 #include <vector>
+#include "EpollServer.h"
 #include "Session.h"
 
 #define FLV_RESOURCE_DIR "../../data"
@@ -19,6 +20,12 @@ public:
                         size_t contentLength,
                         const std::string& cacheControl,
                         bool keepAlive = true);
+
+    void setEpollServer(EpollServer* epollServer) override {
+        epollServer_ = epollServer;
+    }
+private:
+    EpollServer* epollServer_ = nullptr;
 };
 
 #endif // __HTTPFLVSESSION_H__

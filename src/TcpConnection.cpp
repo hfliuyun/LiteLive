@@ -1,6 +1,9 @@
 #include "TcpConnection.h"
 #include "EpollServer.h"
 #include <sys/epoll.h>
+#include "Session.h"
+#include "RtmpSession.h"
+#include "HttpFlvSession.h"
 void TcpConnection::handldRead() {
     char buf[4096];
     while(true) {
@@ -17,6 +20,18 @@ void TcpConnection::handldRead() {
             std::cout << " read error" << std::endl;
             return;
         }
+    }
+    if(!readBuffer_.empty() && session_ == nullptr) {
+        if(readBuffer_[0] == 0x03) {
+            // RTMP 握手协议第一个字节永远是 0x03
+            std::cout << ">>> 嗅探到 RTMP 协议连接！" << std::endl;
+            session_ = std::make_shared<RtmpSession>();
+        } else {
+            // 否则大概率是 HTTP 的 GET 或 OPTIONS (首字母 G 或 O)
+            std::cout << ">>> 嗅探到 HTTP 协议连接！" << std::endl;
+            session_ = std::make_shared<HttpFlvSession>();
+        }
+        session_->setEpollServer(epollServer_);
     }
     session_->onMessage(this, readBuffer_);
 }
