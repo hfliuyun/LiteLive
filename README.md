@@ -48,12 +48,15 @@
 ## 🔨 快速开始
 
 ### 1. 环境准备
+
 确保你的 Linux 系统已安装：
+
 - GCC 4.8+ 或 Clang
 - CMake 3.10+
 - Ninja 或 Make
 
 ### 2. 编译项目
+
 ```bash
 git clone https://github.com/your-username/ZebraStream.git
 cd ZebraStream
@@ -63,23 +66,25 @@ make -j$(nproc)
 ```
 
 ### 3. 运行服务器
+
 ```bash
 # 启动服务器，默认监听 1935 端口
-./HLS_Server 1935
+./LiveLite 1935
 ```
 
 ### 4. 推流测试 (使用 FFmpeg 或 OBS)
+
 ```bash
 flv  ffmpeg -re -i .\test.flv -vcodec h264 -acodec aac -f flv rtmp://127.0.0.1/live/test
 ```
 
-
-
 ### 5. 播放测试
+
 - **HTTP-FLV**: `http://localhost:1935/live/test.flv` (推荐使用 `flv.js` 播放)
 - **RTMP**: `rtmp://localhost:1935/live/test` (推荐使用 `ffplay` 或 `VLC`)
 
 ---
+
 ```bash
 #ffplay 拉流(flv)
 ffplay -i http://127.0.0.1:1935/live/test.flv
@@ -91,6 +96,7 @@ ffplay -i rtmp://127.0.0.1/live/test
 ## 📖 深度解析
 
 如果你对协议的底层实现感兴趣，请查阅 `doc/` 目录下的详细文档：
+
 - [RTMP 协议实现细节](./doc/RTMP.md)
 - [HTTP-FLV 流式传输原理](./doc/HTTP_FLV.md)
 - [HLS 分片技术手册](./doc/HLS.md)

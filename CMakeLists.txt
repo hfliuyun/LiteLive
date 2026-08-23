@@ -1,9 +1,10 @@
 cmake_minimum_required(VERSION 3.10)
 
-project(tinyrtsp)
+project(LiveLite)
 
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
+set(CMAKE_CXX_EXTENSIONS OFF)           # 纯标准 C++，不要 GNU 扩展——Linux/macOS 行为一致
 
 # Include directories
 include_directories(include)
@@ -19,5 +20,4 @@ set(SOURCES
     src/FlvReader.cpp
 )
 
-# Add executable
-add_executable(HLS_Server ${SOURCES})
+add_executable(LiveLite  ${SOURCES})
