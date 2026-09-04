@@ -6,6 +6,9 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 set(CMAKE_CXX_EXTENSIONS OFF)           # 纯标准 C++，不要 GNU 扩展——Linux/macOS 行为一致
 
+# CTest 注册表：等价 enable_testing()，额外提供 -DBUILD_TESTING=OFF 一键关掉测试构建
+include(CTest)
+
 # Include directories
 include_directories(include)
 
@@ -41,7 +44,14 @@ target_link_libraries(LiveLite Poller)
 add_executable(PollerSmokeTest tests/PollerSmokeTest.cpp)
 target_link_libraries(PollerSmokeTest Poller)
 
-add_executable(KqueueProbe tests/kqueue_probe.cpp)
+if(APPLE)
+    add_executable(KqueueProbe tests/kqueue_probe.cpp)
+endif()
 
+add_test(NAME PollerSmoke COMMAND PollerSmokeTest)
+set_tests_properties(PollerSmoke PROPERTIES
+    TIMEOUT 10
+    LABELS "contract"
+)
 add_executable(PollerEchoTest tests/PollerEchoTest.cpp)
 target_link_libraries(PollerEchoTest Poller)
