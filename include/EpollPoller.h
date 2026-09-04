@@ -22,7 +22,7 @@ public:
 private:
     int epollFd_ = -1;
     struct FdState {
-        EventMask mask;
+        EventMask events;
         TriggerMode mode;
     };
     std::unordered_map<int, FdState> fd_states_;//add 后置条件承诺的状态表
