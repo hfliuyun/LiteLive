@@ -55,3 +55,12 @@ set_tests_properties(PollerSmoke PROPERTIES
 )
 add_executable(PollerEchoTest tests/PollerEchoTest.cpp)
 target_link_libraries(PollerEchoTest Poller)
+
+add_executable(PollerContractTest tests/PollerContractTest.cpp)
+target_link_libraries(PollerContractTest Poller)
+
+add_test(NAME PollerContract COMMAND PollerContractTest)
+set_tests_properties(PollerContract PROPERTIES
+    TIMEOUT 10
+    LABELS "contract"
+)
