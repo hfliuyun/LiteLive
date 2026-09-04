@@ -40,3 +40,8 @@ target_link_libraries(LiveLite Poller)
 # 生成测试可执行文件
 add_executable(PollerSmokeTest tests/PollerSmokeTest.cpp)
 target_link_libraries(PollerSmokeTest Poller)
+
+add_executable(KqueueProbe tests/kqueue_probe.cpp)
+
+add_executable(PollerEchoTest tests/PollerEchoTest.cpp)
+target_link_libraries(PollerEchoTest Poller)
