@@ -2,7 +2,6 @@
 #define __TCPCONNECTION_H__
 
 #include "Session.h"
-#include "error.h"
 #include "iostream"
 #include "sys/socket.h"
 #include <cerrno>

@@ -1,7 +1,6 @@
 #include "EpollServer.h"
 #include "HttpFlvSession.h"
 #include "HttpHlsSession.h"
-#include "RtmpSession.h"
 #include "Session.h"
 #include "TcpConnection.h"
 #include <cstddef>
@@ -34,38 +33,35 @@ EpollServer::EpollServer(int port) {
         exit(EXIT_FAILURE);
     }
 
-    epollFd_ = epoll_create1(0);
-    if (epollFd_ == -1) {
-        std::cerr << "Failed to create epoll instance" << std::endl;
+    poller_ = std::unique_ptr<Poller>(CreatePoller());
+    if (!poller_) {
+        std::cerr << "Failed to create poller instance" << std::endl;
+        exit(EXIT_FAILURE);
+    }
+    if (!poller_->Add(listenFd_, EventMask::Readable, TriggerMode::Level)) {
+        std::cerr << "Failed to add listen socket to poller" << std::endl;
         exit(EXIT_FAILURE);
     }
 
-    epoll_event event{};
-    event.events = EPOLLIN;
-    event.data.fd = listenFd_;
-    if (epoll_ctl(epollFd_, EPOLL_CTL_ADD, listenFd_, &event) == -1) {
-        std::cerr << "Failed to add listen socket to epoll" << std::endl;
-        exit(EXIT_FAILURE);
-    }
 }
 
 void EpollServer::run() {
     const int MAX_EVENTS = 10;
-    epoll_event events[MAX_EVENTS];
+    std::vector<ReadyEvent> events(MAX_EVENTS);
     while (true) {
-        int numEvents = epoll_wait(epollFd_, events, MAX_EVENTS, -1);
+        int numEvents = poller_->Wait(-1, events);
         if (numEvents == -1) {
-            std::cerr << "epoll_wait failed" << std::endl;
-            exit(EXIT_FAILURE);
+            std::cerr << "poller_->Wait failed" << std::endl;
+            //exit(EXIT_FAILURE);
         }
         for (int i = 0; i < numEvents; ++i) {
-            if (events[i].data.fd == listenFd_) {
+            if (events[i].fd == listenFd_) {
                 std::cout << "New connection received" << std::endl;
                 acceptConnection();
             } else {
                 // Handle data from existing connection
                 std::cout << "Data received from client" << std::endl;
-                handleClient(events[i].data.fd, events[i]);
+                handleClient(events[i].fd, events[i].mask);
             }
         }
     }
@@ -78,6 +74,7 @@ void EpollServer::acceptConnection() {
     int clientFd = accept(listenFd_, (sockaddr*)&clientAddr, &clientAddrLen);
     if (clientFd == -1) {
         std::cerr << "Failed to accept connection" << std::endl;
+        return;
     }
     int flags = fcntl(clientFd, F_GETFL, 0);
     fcntl(clientFd, F_SETFL, flags | O_NONBLOCK);
@@ -91,28 +88,41 @@ void EpollServer::acceptConnection() {
 #endif
     TcpConnection* conn = new TcpConnection(clientFd, this, session);
     connections_[clientFd] = conn;
-    epoll_event event{};
-    event.events = EPOLLIN | EPOLLET; // 边缘触发
-    event.data.fd = clientFd;
-    if (epoll_ctl(epollFd_, EPOLL_CTL_ADD, clientFd, &event) == -1) {
-        std::cerr << "Failed to add client socket to epoll" << std::endl;
+    if (!poller_->Add(clientFd, EventMask::Readable, TriggerMode::Edge)) {
+        std::cerr << "Failed to add client socket to poller" << std::endl;
+        delete conn;
+        connections_.erase(clientFd);
         close(clientFd);
     }
 }
 
-void EpollServer::handleClient(int clientFd, epoll_event event) {
-    TcpConnection* conn = connections_[clientFd];
-    if (event.events & EPOLLIN) {
+void EpollServer::handleClient(int clientFd, EventMask event) {
+    auto it = connections_.find(clientFd);
+    if (it == connections_.end()) {
+        std::cerr << "Connection not found for fd: " << clientFd << std::endl;
+        return;
+    }
+    TcpConnection* conn = it->second;
+    // if (hasEvent(event, EventMask::Error)) {
+    //     std::cerr << "Error event on fd: " << clientFd << std::endl;
+    //     closeConn(*poller_, connections_, clientFd);
+    //     return;
+    // }
+    // if (hasEvent(event, EventMask::Hangup)) {
+    //     std::cerr << "Hangup event on fd: " << clientFd << std::endl;
+    //     closeConn(*poller_, connections_, clientFd);
+    //     return;
+    // }
+    if (hasEvent(event, EventMask::Readable)) {
         conn->handldRead();
     }
-    if (event.events & EPOLLOUT) {
+    if (hasEvent(event, EventMask::Writable)) {
         conn->handleWrite();
     }
 }
 
 EpollServer::~EpollServer() {
     close(listenFd_);
-    close(epollFd_);
     for (auto& pair : connections_) {
         delete pair.second;
     }

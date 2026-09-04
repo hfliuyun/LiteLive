@@ -3,7 +3,6 @@
 #include "HttpFlvSession.h"
 #include "RtmpSession.h"
 #include "Session.h"
-#include <sys/epoll.h>
 void TcpConnection::handldRead() {
     char buf[4096];
     while (true) {
@@ -56,10 +55,7 @@ void TcpConnection::handleWrite() {
             }
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
                 // 内核缓冲区满，等下次 EPOLLOUT
-                epoll_event event{};
-                event.events = EPOLLOUT | EPOLLIN;
-                event.data.fd = fd_;
-                epoll_ctl(epollServer_->getEpollFd(), EPOLL_CTL_MOD, fd_, &event);
+                epollServer_->getEpollFd()->EnableWrite(fd_);
                 return;
             }
             std::perror("write error");
@@ -69,10 +65,7 @@ void TcpConnection::handleWrite() {
         }
     }
     if (writeBuffer_.empty()) {
-        epoll_event event{};
-        event.events = EPOLLIN;
-        event.data.fd = fd_;
-        epoll_ctl(epollServer_->getEpollFd(), EPOLL_CTL_MOD, fd_, &event);
+        epollServer_->getEpollFd()->DisableWrite(fd_);
     }
 }
 
@@ -84,8 +77,8 @@ void TcpConnection::CloseConnection() {
         session_->onDisconnect(this);
     }
 
+    epollServer_->getEpollFd()->Remove(fd_);
     close(fd_);
-    epoll_ctl(epollServer_->getEpollFd(), EPOLL_CTL_DEL, fd_, nullptr);
     fd_ = -1;
     readBuffer_.clear();
     writeBuffer_.clear();

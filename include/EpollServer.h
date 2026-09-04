@@ -6,15 +6,15 @@
 #include <map>
 #include <memory>
 #include <netinet/in.h>
-#include <sys/epoll.h>
 #include <sys/socket.h>
 #include <unistd.h>
 #include <unordered_map>
+#include "Poller.h"
 class TcpConnection;
 class EpollServer {
 private:
     int listenFd_;
-    int epollFd_;
+    std::unique_ptr<Poller> poller_;
     std::map<int, TcpConnection*> connections_; // fd -> TcpConnection*
 
 public:
@@ -22,8 +22,8 @@ public:
     ~EpollServer();
     void run();
     void acceptConnection();
-    void handleClient(int clientFd, epoll_event event);
-    int getEpollFd() const { return epollFd_; }
+    void handleClient(int clientFd, EventMask event);
+    Poller* getEpollFd() const { return poller_.get(); }
     std::unordered_map<std::string, LiveStream> g_liveStreams;
 };
 
