@@ -1,4 +1,4 @@
-// 只依赖 Poller.h 的 echo server：用来把 KqueuePoller 和「迁移 EpollServer」分开验证。
+// 只依赖 Poller.h 的 echo server：用来把 KqueuePoller 和「迁移 LiveServer」分开验证。
 // 故意不 include TcpConnection.h / RtmpSession.h。
 #include "Poller.h"
 #include <cerrno>

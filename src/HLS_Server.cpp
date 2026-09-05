@@ -1,4 +1,4 @@
-#include "EpollServer.h"
+#include "LiveServer.h"
 #include "HttpHlsSession.h"
 #include "TcpConnection.h"
 #include <signal.h> 
@@ -14,7 +14,7 @@ int main(int argc, char* argv[]) {
         port = std::stoi(argv[1]);
     }
     signal(SIGPIPE, SIG_IGN); // 忽略 SIGPIPE 信号，防止写入关闭的 socket 导致进程终止
-    EpollServer server(port);
+    LiveServer server(port);
     server.run();
     return 0;
 }

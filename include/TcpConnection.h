@@ -9,19 +9,19 @@
 #include <memory>
 #include <unistd.h>
 
-class EpollServer;
+class LiveServer;
 class TcpConnection {
 private:
     int fd_;
     std::string readBuffer_;
     std::string writeBuffer_;
-    EpollServer* epollServer_;
+    LiveServer* liveServer_;
 
     std::shared_ptr<Session> session_;
 
 public:
-    TcpConnection(int fd, EpollServer* epollServer, std::shared_ptr<Session> session)
-        : fd_(fd), epollServer_(epollServer), session_(session) {};
+    TcpConnection(int fd, LiveServer* liveServer, std::shared_ptr<Session> session)
+        : fd_(fd), liveServer_(liveServer), session_(session) {};
 
     void handldRead();
 

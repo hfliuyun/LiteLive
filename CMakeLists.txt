@@ -16,7 +16,7 @@ include_directories(include)
 set(COMMON_SOURCES
     src/HLS_Server.cpp
     src/HttpHlsSession.cpp
-    src/EpollServer.cpp
+    src/LiveServer.cpp
     src/TcpConnection.cpp
     src/HttpFlvSession.cpp
     src/RtmpSession.cpp
@@ -31,8 +31,8 @@ else()
     message(FATAL_ERROR "Unsupported platform: ${CMAKE_SYSTEM_NAME}. Only Linux/macOS supported.")
 endif()
 
-# Poller 单独成一个静态库——这样 能独立验证骨架（cmake --build . --target Poller），
-# 不被还没迁移、含 <sys/epoll.h> 的 EpollServer.cpp 拖垮
+# Poller 单独成一个静态库——这样能独立验证骨架（cmake --build . --target Poller），
+# 只编平台相关的那一个 Poller 实现，不用连着整个服务器一起编
 add_library(Poller STATIC ${POLLER_SOURCES})
 target_include_directories(Poller PUBLIC include)
 

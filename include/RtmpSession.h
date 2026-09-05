@@ -1,7 +1,7 @@
 #ifndef __RTMPSESSION_H__
 #define __RTMPSESSION_H__
 
-#include "EpollServer.h"
+#include "LiveServer.h"
 #include "Session.h"
 #include <cstdint>
 #include <memory>
@@ -30,7 +30,7 @@ class RtmpSession : public Session {
 
 public:
     void onMessage(TcpConnection* conn, std::string& readBuffer) override;
-    void setEpollServer(EpollServer* epollServer) override { epollServer_ = epollServer; }
+    void setLiveServer(LiveServer* liveServer) override { liveServer_ = liveServer; }
     void onDisconnect(TcpConnection* conn) override;
 
 private:
@@ -65,7 +65,7 @@ private:
     uint32_t inChunkSize_ = 128;
     uint32_t outChunkSize_ = 128; // 服务器发送时使用的 Chunk Size，默认为 128
 
-    EpollServer* epollServer_ = nullptr; // 用于访问全局的直播流列表等资源
+    LiveServer* liveServer_ = nullptr; // 用于访问全局的直播流列表等资源
     bool isPublishing_ = false;          // 标记当前连接是否正在推流
     std::string streamName_;             // 存储当前正在推流的流名字
 };

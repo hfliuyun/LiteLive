@@ -53,7 +53,7 @@ void HttpFlvSession::HandleRequest(TcpConnection* conn, const std::string& reque
         flvHeader.push_back(0x00); // PrevTagSize0
         conn->send(flvHeader);
         // 3. 把这个 HTTP 连接作为观众加入直播间！
-        LiveStream& stream = epollServer_->g_liveStreams[streamName];
+        LiveStream& stream = liveServer_->g_liveStreams[streamName];
         stream.flvSubscribers.push_back(conn);
 
         // 4. 秒开机制：瞬间下发“三件套”和“GOP缓存”！全部用 makeFlvTag 打包！
@@ -113,7 +113,7 @@ std::string HttpFlvSession::makeHttpHeader(int status, const std::string& status
 }
 void HttpFlvSession::onDisconnect(TcpConnection* conn) {
     // 因为 HTTP 端目前没存 streamName，可以通过遍历全局流表来踢人
-    for (auto& pair : epollServer_->g_liveStreams) {
+    for (auto& pair : liveServer_->g_liveStreams) {
         LiveStream& stream = pair.second;
         for (auto it = stream.flvSubscribers.begin(); it != stream.flvSubscribers.end(); ++it) {
             if (*it == conn) {

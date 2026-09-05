@@ -1,7 +1,7 @@
 #ifndef __HTTPFLVSESSION_H__
 #define __HTTPFLVSESSION_H__
 
-#include "EpollServer.h"
+#include "LiveServer.h"
 #include "Session.h"
 #include <string>
 #include <vector>
@@ -18,11 +18,11 @@ private:
 public:
     void onMessage(TcpConnection* conn, std::string& readBuffer) override;
     void HandleRequest(TcpConnection* conn, const std::string& request);
-    void setEpollServer(EpollServer* epollServer) override { epollServer_ = epollServer; }
+    void setLiveServer(LiveServer* liveServer) override { liveServer_ = liveServer; }
     void onDisconnect(TcpConnection* conn) override;
 
 private:
-    EpollServer* epollServer_ = nullptr;
+    LiveServer* liveServer_ = nullptr;
 };
 
 #endif // __HTTPFLVSESSION_H__

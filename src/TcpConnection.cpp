@@ -1,5 +1,5 @@
 #include "TcpConnection.h"
-#include "EpollServer.h"
+#include "LiveServer.h"
 #include "HttpFlvSession.h"
 #include "RtmpSession.h"
 #include "Session.h"
@@ -30,7 +30,7 @@ void TcpConnection::handldRead() {
             std::cout << ">>> 嗅探到 HTTP 协议连接！" << std::endl;
             session_ = std::make_shared<HttpFlvSession>();
         }
-        session_->setEpollServer(epollServer_);
+        session_->setLiveServer(liveServer_);
     }
     session_->onMessage(this, readBuffer_);
 }
@@ -55,7 +55,7 @@ void TcpConnection::handleWrite() {
             }
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
                 // 内核缓冲区满，等下次 EPOLLOUT
-                epollServer_->getEpollFd()->EnableWrite(fd_);
+                liveServer_->poller()->EnableWrite(fd_);
                 return;
             }
             std::perror("write error");
@@ -65,7 +65,7 @@ void TcpConnection::handleWrite() {
         }
     }
     if (writeBuffer_.empty()) {
-        epollServer_->getEpollFd()->DisableWrite(fd_);
+        liveServer_->poller()->DisableWrite(fd_);
     }
 }
 
@@ -77,7 +77,7 @@ void TcpConnection::CloseConnection() {
         session_->onDisconnect(this);
     }
 
-    epollServer_->getEpollFd()->Remove(fd_);
+    liveServer_->poller()->Remove(fd_);
     close(fd_);
     fd_ = -1;
     readBuffer_.clear();

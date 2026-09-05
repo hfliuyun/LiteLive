@@ -1,4 +1,4 @@
-#include "EpollServer.h"
+#include "LiveServer.h"
 #include "HttpFlvSession.h"
 #include "HttpHlsSession.h"
 #include "Session.h"
@@ -7,7 +7,7 @@
 #include <fcntl.h>
 #include <memory>
 #include <sys/socket.h>
-EpollServer::EpollServer(int port) {
+LiveServer::LiveServer(int port) {
     listenFd_ = socket(AF_INET, SOCK_STREAM, 0);
     if (listenFd_ == -1) {
         std::cerr << "Failed to create socket" << std::endl;
@@ -45,7 +45,7 @@ EpollServer::EpollServer(int port) {
 
 }
 
-void EpollServer::run() {
+void LiveServer::run() {
     const int MAX_EVENTS = 10;
     std::vector<ReadyEvent> events(MAX_EVENTS);
     while (true) {
@@ -67,7 +67,7 @@ void EpollServer::run() {
     }
 }
 
-void EpollServer::acceptConnection() {
+void LiveServer::acceptConnection() {
     // Handle new connection
     sockaddr_in clientAddr{};
     socklen_t clientAddrLen = sizeof(clientAddr);
@@ -96,7 +96,7 @@ void EpollServer::acceptConnection() {
     }
 }
 
-void EpollServer::handleClient(int clientFd, EventMask event) {
+void LiveServer::handleClient(int clientFd, EventMask event) {
     auto it = connections_.find(clientFd);
     if (it == connections_.end()) {
         std::cerr << "Connection not found for fd: " << clientFd << std::endl;
@@ -121,7 +121,7 @@ void EpollServer::handleClient(int clientFd, EventMask event) {
     }
 }
 
-EpollServer::~EpollServer() {
+LiveServer::~LiveServer() {
     close(listenFd_);
     for (auto& pair : connections_) {
         delete pair.second;

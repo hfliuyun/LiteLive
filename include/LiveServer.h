@@ -1,5 +1,5 @@
-#ifndef _EPOLLSERVER_H__
-#define _EPOLLSERVER_H__
+#ifndef _LIVESERVER_H__
+#define _LIVESERVER_H__
 #include "LiveStream.h"
 #include <arpa/inet.h>
 #include <iostream>
@@ -11,20 +11,20 @@
 #include <unordered_map>
 #include "Poller.h"
 class TcpConnection;
-class EpollServer {
+class LiveServer {
 private:
     int listenFd_;
     std::unique_ptr<Poller> poller_;
     std::map<int, TcpConnection*> connections_; // fd -> TcpConnection*
 
 public:
-    EpollServer(int port);
-    ~EpollServer();
+    LiveServer(int port);
+    ~LiveServer();
     void run();
     void acceptConnection();
     void handleClient(int clientFd, EventMask event);
-    Poller* getEpollFd() const { return poller_.get(); }
+    Poller* poller() const { return poller_.get(); }
     std::unordered_map<std::string, LiveStream> g_liveStreams;
 };
 
-#endif //_EPOLLSERVER_H__
+#endif //_LIVESERVER_H__

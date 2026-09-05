@@ -291,10 +291,10 @@ void RtmpSession::processFullMessage(TcpConnection* conn, const RtmpMessageHeade
             // 3.标记自己是观众，并把自己加入全局流表的观众列表
             this->isPublishing_ = false;
             this->streamName_ = streamName;
-            epollServer_->g_liveStreams[streamName].subscribers.push_back(conn);
+            liveServer_->g_liveStreams[streamName].subscribers.push_back(conn);
 
             // 4. ！！！极其重要：给新观众补发“三件套”！！！
-            LiveStream& stream = epollServer_->g_liveStreams[streamName];
+            LiveStream& stream = liveServer_->g_liveStreams[streamName];
             if (!stream.metadata.empty()) {
                 sendRtmpMessage(conn, 3, 18, stream.metadata, 0, 1); // Metadata 包走 CSID 3
             }
@@ -356,7 +356,7 @@ void RtmpSession::processFullMessage(TcpConnection* conn, const RtmpMessageHeade
             streamName_ = streamName;
 
             // 3. 在全局流表中创建这个流
-            epollServer_->g_liveStreams[streamName].publisher = conn;
+            liveServer_->g_liveStreams[streamName].publisher = conn;
 
             // 4. 给主播回复 onStatus (NetStream.Publish.Start)，告诉他可以开始推数据了
             sendPublishResponse(conn, transactionId);
@@ -380,7 +380,7 @@ void RtmpSession::processFullMessage(TcpConnection* conn, const RtmpMessageHeade
         if (!this->isPublishing_)
             return;
 
-        LiveStream& stream = epollServer_->g_liveStreams[this->streamName_];
+        LiveStream& stream = liveServer_->g_liveStreams[this->streamName_];
         // 1. 判断并缓存“三件套”
         if (header.messageTypeId == 18) {
             stream.metadata = payload;          // 缓存 Metadata
@@ -738,7 +738,7 @@ void RtmpSession::onDisconnect(TcpConnection* conn) {
     if (streamName_.empty())
         return; // 还没建立流就断开了
 
-    LiveStream& stream = epollServer_->g_liveStreams[streamName_];
+    LiveStream& stream = liveServer_->g_liveStreams[streamName_];
 
     if (this->isPublishing_) {
         std::cout << ">>> 主播 [" << streamName_ << "] 断开连接，直播结束！" << std::endl;
