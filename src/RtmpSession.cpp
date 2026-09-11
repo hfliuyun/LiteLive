@@ -2,10 +2,12 @@
 #include "FlvReader.h"
 #include "LiveStream.h"
 #include "TcpConnection.h"
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <cstring>
 #include <iostream>
+#include <vector>
 
 void RtmpSession::onMessage(TcpConnection* conn, std::string& readBuffer) {
     if (handshakeState_ == STATE_WAIT_C0C1) {
@@ -291,10 +293,12 @@ void RtmpSession::processFullMessage(TcpConnection* conn, const RtmpMessageHeade
             // 3.标记自己是观众，并把自己加入全局流表的观众列表
             this->isPublishing_ = false;
             this->streamName_ = streamName;
-            liveServer_->g_liveStreams[streamName].subscribers.push_back(conn);
+            auto found = liveServer_->g_liveStreams.find(streamName_);   // find，不要用 operator[]
+            if (found == liveServer_->g_liveStreams.end()) return;
+            LiveStream& stream = found->second;
+            stream.subscribers.push_back(conn);
 
             // 4. ！！！极其重要：给新观众补发“三件套”！！！
-            LiveStream& stream = liveServer_->g_liveStreams[streamName];
             if (!stream.metadata.empty()) {
                 sendRtmpMessage(conn, 3, 18, stream.metadata, 0, 1); // Metadata 包走 CSID 3
             }
@@ -356,7 +360,12 @@ void RtmpSession::processFullMessage(TcpConnection* conn, const RtmpMessageHeade
             streamName_ = streamName;
 
             // 3. 在全局流表中创建这个流
-            liveServer_->g_liveStreams[streamName].publisher = conn;
+            auto [it, inserted] = liveServer_->g_liveStreams.try_emplace(streamName);
+            LiveStream& stream = it->second;
+            if (!inserted && stream.publisher) {
+                std::cout << ">>> 警告：流 [" << streamName << "] 已有主播，覆盖" << std::endl;
+            }
+            stream.publisher = conn;
 
             // 4. 给主播回复 onStatus (NetStream.Publish.Start)，告诉他可以开始推数据了
             sendPublishResponse(conn, transactionId);
@@ -380,7 +389,12 @@ void RtmpSession::processFullMessage(TcpConnection* conn, const RtmpMessageHeade
         if (!this->isPublishing_)
             return;
 
-        LiveStream& stream = liveServer_->g_liveStreams[this->streamName_];
+        auto found = liveServer_->g_liveStreams.find(streamName_);  // find，不建流
+        if (found == liveServer_->g_liveStreams.end()) {
+            std::cerr << ">>> 错误：主播 [" << streamName_ << "] 的流不存在，丢弃数据包" << std::endl;
+            return;
+        }
+        LiveStream& stream = found->second;
         // 1. 判断并缓存“三件套”
         if (header.messageTypeId == 18) {
             stream.metadata = payload;          // 缓存 Metadata
@@ -417,7 +431,8 @@ void RtmpSession::processFullMessage(TcpConnection* conn, const RtmpMessageHeade
         }
 
         // 2. 【广播！】把这个包原封不动地发给所有 RTMP 在线观众
-        for (TcpConnection* subConn : stream.subscribers) {
+        auto rtmpSubs = stream.subscribers;
+        for (TcpConnection* subConn : rtmpSubs) {
             // 直接复用你之前写好的 sendRtmpMessage 函数进行发送端分片下发！
             // TODO（如果在生产环境中，这里要把组装好的二进制 buffer 存下来发，避免每个观众都走一遍切片 CPU 计算。
             // 但目前为了跑通，直接调 sendRtmpMessage 是代码量最少的做法）
@@ -431,8 +446,9 @@ void RtmpSession::processFullMessage(TcpConnection* conn, const RtmpMessageHeade
         }
 
         // 3. 【新增广播！】封装成 FLV Tag，发给所有 HTTP 网页在线观众！
+        auto flvSubs = stream.flvSubscribers;
         std::string flvTag = makeFlvTag(header.messageTypeId, header.timestamp, payload);
-        for (TcpConnection* flvSubConn : stream.flvSubscribers) {
+        for (TcpConnection* flvSubConn : flvSubs) {
             flvSubConn->send(flvTag);
         }
 
@@ -737,23 +753,26 @@ std::array<uint8_t, 8> doubleToBigEndian(double value) {
 void RtmpSession::onDisconnect(TcpConnection* conn) {
     if (streamName_.empty())
         return; // 还没建立流就断开了
-
-    LiveStream& stream = liveServer_->g_liveStreams[streamName_];
-
+    auto found = liveServer_->g_liveStreams.find(streamName_);   // find，不要用 operator[]
+    if (found == liveServer_->g_liveStreams.end()) return;
+    LiveStream& stream = found->second;
     if (this->isPublishing_) {
         std::cout << ">>> 主播 [" << streamName_ << "] 断开连接，直播结束！" << std::endl;
-        stream.publisher = nullptr;
-        // TODO 正常应该把观众也全踢下线并销毁整个 stream，
-        // 目前可以先简单清空缓存
-        stream.gopCache.clear();
+
+        std::vector<TcpConnection*> rtmpSubs = std::move(stream.subscribers);
+        std::vector<TcpConnection*> flvSubs = std::move(stream.flvSubscribers);
+
+        liveServer_->g_liveStreams.erase(found);
+        for(auto &sub:rtmpSubs) {
+            sub->CloseConnection();
+        }
+        for(auto &sub:flvSubs) {
+            sub->CloseConnection();
+        }
     } else {
         std::cout << ">>> RTMP 观众离开直播间..." << std::endl;
         // 从 subscribers 数组中移除这个连接
-        for (auto it = stream.subscribers.begin(); it != stream.subscribers.end(); ++it) {
-            if (*it == conn) {
-                stream.subscribers.erase(it);
-                break;
-            }
-        }
+        auto& subs = stream.subscribers;
+        subs.erase(std::remove(subs.begin(), subs.end(), conn),subs.end());
     }
 }
