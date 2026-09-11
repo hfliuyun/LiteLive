@@ -68,3 +68,16 @@ set_tests_properties(PollerContract PROPERTIES
     TIMEOUT 10
     LABELS "contract"
 )
+
+add_executable(ConnectionLifecycleTest
+                    src/TcpConnection.cpp
+                    src/RtmpSession.cpp
+                    src/HttpFlvSession.cpp
+                    src/LiveServer.cpp
+                    tests/ConnectionLifecycleTest.cpp)
+target_link_libraries(ConnectionLifecycleTest Poller)
+add_test(NAME ConnectionLifecycle COMMAND ConnectionLifecycleTest)
+set_tests_properties(ConnectionLifecycle PROPERTIES
+    TIMEOUT 10
+    LABELS "contract"
+)
