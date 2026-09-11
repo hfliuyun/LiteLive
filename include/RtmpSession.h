@@ -33,6 +33,11 @@ public:
     void setLiveServer(LiveServer* liveServer) override { liveServer_ = liveServer; }
     void onDisconnect(TcpConnection* conn) override;
 
+#ifdef LITE_LIVE_TESTING
+    void setPublish(bool Publishing) {isPublishing_ = Publishing;}
+    void setStream(std::string name) {streamName_ = name;}
+#endif
+
 private:
     void sendS0S1S2(TcpConnection* conn, const std::string& c1);
     bool verifyC2(const std::string& c2, const std::string& s1);

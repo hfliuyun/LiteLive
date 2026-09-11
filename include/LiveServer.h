@@ -29,6 +29,12 @@ public:
     Poller* poller() const { return poller_.get(); }
     void sweepOnce();
 
+#ifdef LITE_LIVE_TESTING
+    size_t connectionCount() const;
+    bool hasConnection(int fd) const;
+    void injectConnection(int fd, std::unique_ptr<TcpConnection> conn);
+#endif
+
     std::unordered_map<std::string, LiveStream> g_liveStreams;
 };
 

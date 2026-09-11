@@ -140,6 +140,20 @@ void LiveServer::sweepOnce(){
     toDelete_.clear();
 }
 
+#ifdef LITE_LIVE_TESTING
+size_t LiveServer::connectionCount() const {
+    return connections_.size();
+}
+bool LiveServer::hasConnection(int fd) const {
+    auto it = connections_.find(fd);
+    return it != connections_.end() ? true : false;
+}
+void LiveServer::injectConnection(int fd, std::unique_ptr<TcpConnection> conn) {
+    conn->setOnCloseCb([this](int fd){onConnectionCloseCallback(fd);});
+    connections_[fd] = std::move(conn);
+}
+#endif
+
 LiveServer::~LiveServer() {
     close(listenFd_);
     for(auto &it :connections_){

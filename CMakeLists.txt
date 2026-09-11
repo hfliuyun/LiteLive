@@ -9,6 +9,10 @@ set(CMAKE_CXX_EXTENSIONS OFF)           # 纯标准 C++，不要 GNU 扩展—�
 # CTest 注册表：等价 enable_testing()，额外提供 -DBUILD_TESTING=OFF 一键关掉测试构建
 include(CTest)
 
+if(BUILD_TESTING)
+    add_compile_definitions(LITE_LIVE_TESTING)
+endif()
+
 # Include directories
 include_directories(include)
 
