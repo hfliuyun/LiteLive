@@ -2,7 +2,7 @@
 #include "HttpHlsSession.h"
 #include "TcpConnection.h"
 #include <signal.h> 
-
+#include <iostream>
 int main(int argc, char* argv[]) {
     std::cout << "Starting HLS Server..." << std::endl;
 #if 0 

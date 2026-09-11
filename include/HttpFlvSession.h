@@ -23,6 +23,7 @@ public:
 
 private:
     LiveServer* liveServer_ = nullptr;
+    std::string streamName_;
 };
 
 #endif // __HTTPFLVSESSION_H__

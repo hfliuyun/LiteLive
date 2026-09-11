@@ -1,6 +1,7 @@
 #include "HttpFlvSession.h"
 #include "LiveStream.h"
 #include "TcpConnection.h"
+#include <algorithm>
 #include <fstream>
 #include <iostream>
 #include <sstream>
@@ -29,8 +30,8 @@ void HttpFlvSession::HandleRequest(TcpConnection* conn, const std::string& reque
     // 识别实时直播流请求！
     if (url.find("/live/") == 0 && url.find(".flv") != std::string::npos) {
         // 截取出流名，比如从 "/live/test.flv" 截取出 "test"
-        std::string streamName = url.substr(6, url.find(".flv") - 6);
-        std::cout << ">>> 收到网页端 HTTP-FLV 实时拉流请求: " << streamName << std::endl;
+        streamName_ = url.substr(6, url.find(".flv") - 6);
+        std::cout << ">>> 收到网页端 HTTP-FLV 实时拉流请求: " << streamName_ << std::endl;
 
         // 1. 发送 HTTP 响应头 (不要传 Content-Length，让连接一直保活！)
         conn->send(makeHttpHeader(200, "OK", "video/x-flv", 0, "no-cache", true));
@@ -53,7 +54,9 @@ void HttpFlvSession::HandleRequest(TcpConnection* conn, const std::string& reque
         flvHeader.push_back(0x00); // PrevTagSize0
         conn->send(flvHeader);
         // 3. 把这个 HTTP 连接作为观众加入直播间！
-        LiveStream& stream = liveServer_->g_liveStreams[streamName];
+        auto found = liveServer_->g_liveStreams.find(streamName_);   // find，不要用 operator[]
+        if (found == liveServer_->g_liveStreams.end()) return;
+        LiveStream& stream = found->second;
         stream.flvSubscribers.push_back(conn);
 
         // 4. 秒开机制：瞬间下发“三件套”和“GOP缓存”！全部用 makeFlvTag 打包！
@@ -112,15 +115,11 @@ std::string HttpFlvSession::makeHttpHeader(int status, const std::string& status
     return oss.str();
 }
 void HttpFlvSession::onDisconnect(TcpConnection* conn) {
-    // 因为 HTTP 端目前没存 streamName，可以通过遍历全局流表来踢人
-    for (auto& pair : liveServer_->g_liveStreams) {
-        LiveStream& stream = pair.second;
-        for (auto it = stream.flvSubscribers.begin(); it != stream.flvSubscribers.end(); ++it) {
-            if (*it == conn) {
-                std::cout << ">>> HTTP-FLV 观众离开直播间 [" << pair.first << "]..." << std::endl;
-                stream.flvSubscribers.erase(it);
-                return;
-            }
-        }
-    }
+    auto it = liveServer_->g_liveStreams.find(streamName_);
+    if(it == liveServer_->g_liveStreams.end()) return;
+    auto &stream = it->second;
+    std::cout << ">>> HTTP-FLV 观众离开直播间 [" << streamName_ << "]..." << std::endl;
+    stream.flvSubscribers.erase(
+                            std::remove(stream.flvSubscribers.begin(), stream.flvSubscribers.end(), conn),
+                            stream.flvSubscribers.end());
 }
