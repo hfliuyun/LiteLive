@@ -2,21 +2,24 @@
 #define _LIVESERVER_H__
 #include "LiveStream.h"
 #include <arpa/inet.h>
-#include <iostream>
+#include <cstddef>
 #include <map>
 #include <memory>
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <unistd.h>
 #include <unordered_map>
+#include <utility>
+#include <vector>
 #include "Poller.h"
 class TcpConnection;
 class LiveServer {
 private:
     int listenFd_;
     std::unique_ptr<Poller> poller_;
-    std::map<int, TcpConnection*> connections_; // fd -> TcpConnection*
-
+    std::map<int, std::unique_ptr<TcpConnection>> connections_; // fd -> TcpConnection*
+    std::vector<int> toDelete_;
+    void onConnectionCloseCallback(int fd);
 public:
     LiveServer(int port);
     ~LiveServer();
@@ -24,6 +27,8 @@ public:
     void acceptConnection();
     void handleClient(int clientFd, EventMask event);
     Poller* poller() const { return poller_.get(); }
+    void sweepOnce();
+
     std::unordered_map<std::string, LiveStream> g_liveStreams;
 };
 

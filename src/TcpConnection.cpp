@@ -3,7 +3,9 @@
 #include "HttpFlvSession.h"
 #include "RtmpSession.h"
 #include "Session.h"
+#include <iostream>
 void TcpConnection::handldRead() {
+    if(isClose()) return;
     char buf[4096];
     while (true) {
         ssize_t n = read(fd_, buf, sizeof(buf));
@@ -32,15 +34,17 @@ void TcpConnection::handldRead() {
         }
         session_->setLiveServer(liveServer_);
     }
-    session_->onMessage(this, readBuffer_);
+    if(session_) session_->onMessage(this, readBuffer_);
 }
 
 void TcpConnection::send(const std::string& data) {
+    if(isClose()) return;
     writeBuffer_.append(data);
     handleWrite();
 }
 
 void TcpConnection::handleWrite() {
+    if(isClose()) return;
     if (writeBuffer_.empty())
         return;
 
@@ -70,16 +74,11 @@ void TcpConnection::handleWrite() {
 }
 
 void TcpConnection::CloseConnection() {
-    if (fd_ < 0)
-        return;
+    if(close_) return;
+    close_ = true;
     // 通知上层业务进行清理
     if (session_) {
         session_->onDisconnect(this);
     }
-
-    liveServer_->poller()->Remove(fd_);
-    close(fd_);
-    fd_ = -1;
-    readBuffer_.clear();
-    writeBuffer_.clear();
+    onCloseCb(fd_);
 }

@@ -7,6 +7,9 @@
 #include <fcntl.h>
 #include <memory>
 #include <sys/socket.h>
+#include <iostream>
+#include <unistd.h>
+#include <utility>
 LiveServer::LiveServer(int port) {
     listenFd_ = socket(AF_INET, SOCK_STREAM, 0);
     if (listenFd_ == -1) {
@@ -64,6 +67,7 @@ void LiveServer::run() {
                 handleClient(events[i].fd, events[i].mask);
             }
         }
+    sweepOnce();
     }
 }
 
@@ -86,13 +90,13 @@ void LiveServer::acceptConnection() {
 #else
     std::shared_ptr<Session> session = nullptr;
 #endif
-    TcpConnection* conn = new TcpConnection(clientFd, this, session);
-    connections_[clientFd] = conn;
+    auto conn = std::make_unique<TcpConnection>(clientFd, this, session);
+    conn->setOnCloseCb([this](int fd) {onConnectionCloseCallback(fd);});
     if (!poller_->Add(clientFd, EventMask::Readable, TriggerMode::Edge)) {
         std::cerr << "Failed to add client socket to poller" << std::endl;
-        delete conn;
-        connections_.erase(clientFd);
         close(clientFd);
+    } else {
+        connections_[clientFd] = std::move(conn);
     }
 }
 
@@ -102,28 +106,44 @@ void LiveServer::handleClient(int clientFd, EventMask event) {
         std::cerr << "Connection not found for fd: " << clientFd << std::endl;
         return;
     }
-    TcpConnection* conn = it->second;
-    // if (hasEvent(event, EventMask::Error)) {
-    //     std::cerr << "Error event on fd: " << clientFd << std::endl;
-    //     closeConn(*poller_, connections_, clientFd);
-    //     return;
-    // }
-    // if (hasEvent(event, EventMask::Hangup)) {
-    //     std::cerr << "Hangup event on fd: " << clientFd << std::endl;
-    //     closeConn(*poller_, connections_, clientFd);
-    //     return;
-    // }
+    if (hasEvent(event, EventMask::Error)) {
+        it->second->CloseConnection();
+        return;
+    }
+    if (hasEvent(event, EventMask::Hangup)) {
+        std::cerr << "Hangup event on fd: " << clientFd << std::endl;
+        it->second->CloseConnection();
+        return;
+    }
+    if(it->second->isClose()) return;
     if (hasEvent(event, EventMask::Readable)) {
-        conn->handldRead();
+        it->second->handldRead();
     }
+    if(it->second->isClose()) return;
     if (hasEvent(event, EventMask::Writable)) {
-        conn->handleWrite();
+        it->second->handleWrite();
     }
+}
+
+
+void LiveServer::onConnectionCloseCallback(int fd) {
+    poller_->Remove(fd);
+    toDelete_.push_back(fd);
+
+}
+
+void LiveServer::sweepOnce(){
+    for(int fd: toDelete_) {
+        close(fd);
+        connections_.erase(fd);
+    }
+    toDelete_.clear();
 }
 
 LiveServer::~LiveServer() {
     close(listenFd_);
-    for (auto& pair : connections_) {
-        delete pair.second;
+    for(auto &it :connections_){
+        close(it.first);
     }
+    connections_.clear();
 }
