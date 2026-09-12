@@ -9,35 +9,60 @@
 #include <iostream>
 #include <vector>
 
-void RtmpSession::onMessage(TcpConnection* conn, std::string& readBuffer) {
-    if (handshakeState_ == STATE_WAIT_C0C1) {
-        if (readBuffer.size() < 1537) {
-            return; // 等待读取完整的 C0+C1
-        }
-        // 处理 C0+C1
-        char c0 = readBuffer[0];
-        std::string c1 = readBuffer.substr(1, 1536);
-        readBuffer.erase(0, 1537);
-        // 生成 S0+S1+S2
-        sendS0S1S2(conn, c1);
-        handshakeState_ = STATE_WAIT_C2;
-    } else if (handshakeState_ == STATE_WAIT_C2) {
-        if (readBuffer.size() < 1536) {
-            return; // 等待读取完整的 C2
-        }
-        // 处理 C2
-        std::string c2 = readBuffer.substr(0, 1536);
-        // TODO : 验证 C2 是否正确
+// Adobe RTMP 1.0 §5.2.2–5.2.4：C0/S0 各 1 字节，C1/S1/C2/S2 各 1536 字节
+static constexpr size_t kC1Size = 1536;
+static constexpr size_t kC0C1Size = 1537;                     // C0 + C1
+static constexpr size_t kC2Size = 1536;
+static constexpr size_t kFullSize = kC0C1Size + kC2Size;      // 3073
+static constexpr size_t kS0S1S2Size = 1 + 1536 + 1536;        // 3073
 
-        readBuffer.erase(0, 1536);
-        handshakeState_ = STATE_HANDSHAKE_DONE;
-        std::cout << "RTMP Handshake completed" << std::endl;
-    } else if (handshakeState_ == STATE_HANDSHAKE_DONE) {
-        // 这里可以添加解析 RTMP Chunk 的逻辑
-        std::cout << "Received RTMP data: " << readBuffer.size() << " bytes" << std::endl;
-        // std::cout << "readbuffer: " << readBuffer << std::endl;
-        handleRtmpChunk(conn, readBuffer);
-        // readBuffer.clear(); // 清空缓冲区，准备接收下一条消息
+// 长度是 off-by-one 高发区，编译期钉死，别等红灯才发现算错
+static_assert(kC0C1Size == 1537, "C0+C1 必须恰好 1537 字节");
+static_assert(kFullSize == 3073, "C0C1+C2 必须恰好 3073 字节，不是 3072");
+static_assert(kS0S1S2Size == 3073, "S0+S1+S2 必须恰好 3073 字节");
+void RtmpSession::onMessage(TcpConnection* conn, std::string& readBuffer) {
+    bool continueParsing = true;
+    while(continueParsing) {
+        switch (handshakeState_) {
+            case STATE_WAIT_C0C1: {
+                if (readBuffer.size() < kC0C1Size) {
+                    continueParsing = false;
+                    break; // 等待读取完整的 C0+C1
+                }
+                // 处理 C0+C1
+                char c0 = readBuffer[0];
+                std::string c1 = readBuffer.substr(1, kC1Size);
+                readBuffer.erase(0, kC0C1Size);
+                // 生成 S0+S1+S2
+                sendS0S1S2(conn, c1);
+                handshakeState_ = STATE_WAIT_C2;
+                break;
+            }
+            case STATE_WAIT_C2: {
+                if (readBuffer.size() < kC2Size) {
+                    continueParsing = false;
+                    break; // 等待读取完整的 C2
+                }
+                // 处理 C2
+                std::string c2 = readBuffer.substr(0, kC2Size);
+                // TODO : 验证 C2 是否正确
+
+                readBuffer.erase(0, kC2Size);
+                handshakeState_ = STATE_HANDSHAKE_DONE;
+                break;
+            }
+            case STATE_HANDSHAKE_DONE: {
+                // 这里可以添加解析 RTMP Chunk 的逻辑
+                handleRtmpChunk(conn, readBuffer);
+                continueParsing = false;
+                break;
+            }
+            default: {
+                std::cerr << "Unknown state error!" << std::endl;
+                continueParsing = false;
+                break;
+            }
+        }
     }
 }
 
