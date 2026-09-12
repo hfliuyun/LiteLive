@@ -81,3 +81,17 @@ set_tests_properties(ConnectionLifecycle PROPERTIES
     TIMEOUT 10
     LABELS "contract"
 )
+
+
+add_executable(RtmpHandshakeTest
+                    src/TcpConnection.cpp
+                    src/RtmpSession.cpp
+                    src/HttpFlvSession.cpp
+                    src/LiveServer.cpp
+                    tests/RtmpHandshakeTest.cpp)
+target_link_libraries(RtmpHandshakeTest Poller)
+add_test(NAME RtmpHandshake COMMAND RtmpHandshakeTest)
+set_tests_properties(RtmpHandshake PROPERTIES
+    TIMEOUT 10
+    LABELS "contract"
+)
