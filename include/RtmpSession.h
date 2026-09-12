@@ -29,6 +29,12 @@ struct RtmpChunkContext {
 class RtmpSession : public Session {
 
 public:
+    enum HandshakeState {
+        STATE_WAIT_C0C1,      // 等待读取 1537 字节的 C0+C1
+        STATE_WAIT_C2,        // 等待读取 1536 字节的 C2
+        STATE_HANDSHAKE_DONE, // 握手完成，准备解析 RTMP Chunk
+    };
+
     void onMessage(TcpConnection* conn, std::string& readBuffer) override;
     void setLiveServer(LiveServer* liveServer) override { liveServer_ = liveServer; }
     void onDisconnect(TcpConnection* conn) override;
@@ -36,6 +42,7 @@ public:
 #ifdef LITE_LIVE_TESTING
     void setPublish(bool Publishing) {isPublishing_ = Publishing;}
     void setStream(std::string name) {streamName_ = name;}
+    HandshakeState handshakeState() const { return handshakeState_; }
 #endif
 
 private:
@@ -55,12 +62,6 @@ private:
     void sendPlayResponse(TcpConnection* conn);
     void sendPublishResponse(TcpConnection* conn, double transIdFromClient);
 
-    // 定义握手的状态机
-    enum HandshakeState {
-        STATE_WAIT_C0C1,      // 等待读取 1537 字节的 C0+C1
-        STATE_WAIT_C2,        // 等待读取 1536 字节的 C2
-        STATE_HANDSHAKE_DONE, // 握手完成，准备解析 RTMP Chunk
-    };
     HandshakeState handshakeState_ = STATE_WAIT_C0C1;
 
     // 映射表：CSID -> 对应的组包上下文
