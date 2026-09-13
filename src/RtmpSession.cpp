@@ -276,9 +276,10 @@ void RtmpSession::processFullMessage(TcpConnection* conn, const RtmpMessageHeade
         }
     } else if (header.messageTypeId == 1) {
         if (payload.size() >= 4) {
-            uint32_t clientChunkSize = static_cast<uint8_t>(payload[0] << 24) |
-                                       (static_cast<uint8_t>(payload[1] << 16) |
-                                       (static_cast<uint8_t>(payload[2]) << 8) | static_cast<uint8_t>(payload[3]));
+            uint32_t clientChunkSize =  static_cast<uint8_t>(payload[0])  << 24 |
+                                       (static_cast<uint8_t>(payload[1]) << 16) |
+                                       (static_cast<uint8_t>(payload[2]) << 8)  | 
+                                        static_cast<uint8_t>(payload[3]);
             if(chunkreassembler_) chunkreassembler_->setChunkSize(clientChunkSize);
         }
 
