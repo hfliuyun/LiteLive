@@ -5,27 +5,11 @@
 #include "Session.h"
 #include <cstdint>
 #include <memory>
-#include <unordered_map>
-#include <vector>
-
-// 记录一个完整 Message 的属性
-struct RtmpMessageHeader {
-    uint32_t timestamp = 0;
-    uint32_t messageLength = 0;
-    uint8_t messageTypeId = 0;
-    uint32_t messageStreamId = 0;
-};
+#include <optional>
+#include <array>
+#include "ChunkReassembler.h"
 
 std::array<uint8_t, 8> doubleToBigEndian(double value);
-
-// 记录某一个 CSID 通道的组包上下文
-struct RtmpChunkContext {
-    RtmpMessageHeader header;    // 这个通道当前正在处理的 Message 头
-    std::string payload;         // 用于将各个 Chunk 碎片拼接起来的缓冲区
-    uint32_t bytesRead = 0;      // 这个 Message 已经接收了多少字节
-    uint32_t timestampDelta = 0; // <--- 新增：用来记住这个通道的时间增量
-};
-
 class RtmpSession : public Session {
 
 public:
@@ -34,7 +18,6 @@ public:
         STATE_WAIT_C2,        // 等待读取 1536 字节的 C2
         STATE_HANDSHAKE_DONE, // 握手完成，准备解析 RTMP Chunk
     };
-
     void onMessage(TcpConnection* conn, std::string& readBuffer) override;
     void setLiveServer(LiveServer* liveServer) override { liveServer_ = liveServer; }
     void onDisconnect(TcpConnection* conn) override;
@@ -43,12 +26,17 @@ public:
     void setPublish(bool Publishing) {isPublishing_ = Publishing;}
     void setStream(std::string name) {streamName_ = name;}
     HandshakeState handshakeState() const { return handshakeState_; }
+    std::optional<RtmpChunkContext> getChunkContext(int csid) {
+        if(!chunkreassembler_) return std::nullopt;
+        return chunkreassembler_->getChunkContext(csid);
+    }
+    int countCallbackNum = 0;
+    int getCountProcessMessage() { return countCallbackNum;}
 #endif
 
 private:
     void sendS0S1S2(TcpConnection* conn, const std::string& c1);
     bool verifyC2(const std::string& c2, const std::string& s1);
-    void handleRtmpChunk(TcpConnection* conn, std::string& readBuffer);
     //// 辅助函数：将大端序的 uint32 写入字符串
     void writeUint32BE(std::string& buffer, uint32_t value);
     // 辅助函数：将大端序的 uint24 写入字符串 (RTMP 长度专用)
@@ -64,11 +52,11 @@ private:
 
     HandshakeState handshakeState_ = STATE_WAIT_C0C1;
 
-    // 映射表：CSID -> 对应的组包上下文
-    std::unordered_map<int, RtmpChunkContext> chunkContexts_;
+    // Chunk Parser
+    std::unique_ptr<ChunkReassembler> chunkreassembler_;
+
 
     // 服务器当前约定的最大接收块大小，默认为 128
-    uint32_t inChunkSize_ = 128;
     uint32_t outChunkSize_ = 128; // 服务器发送时使用的 Chunk Size，默认为 128
 
     LiveServer* liveServer_ = nullptr; // 用于访问全局的直播流列表等资源

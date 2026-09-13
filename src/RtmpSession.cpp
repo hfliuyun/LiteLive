@@ -1,4 +1,5 @@
 #include "RtmpSession.h"
+#include "ChunkReassembler.h"
 #include "FlvReader.h"
 #include "LiveStream.h"
 #include "TcpConnection.h"
@@ -7,6 +8,8 @@
 #include <cstdint>
 #include <cstring>
 #include <iostream>
+#include <memory>
+#include <string>
 #include <vector>
 
 // Adobe RTMP 1.0 §5.2.2–5.2.4：C0/S0 各 1 字节，C1/S1/C2/S2 各 1536 字节
@@ -20,6 +23,8 @@ static constexpr size_t kS0S1S2Size = 1 + 1536 + 1536;        // 3073
 static_assert(kC0C1Size == 1537, "C0+C1 必须恰好 1537 字节");
 static_assert(kFullSize == 3073, "C0C1+C2 必须恰好 3073 字节，不是 3072");
 static_assert(kS0S1S2Size == 3073, "S0+S1+S2 必须恰好 3073 字节");
+
+
 void RtmpSession::onMessage(TcpConnection* conn, std::string& readBuffer) {
     bool continueParsing = true;
     while(continueParsing) {
@@ -53,7 +58,20 @@ void RtmpSession::onMessage(TcpConnection* conn, std::string& readBuffer) {
             }
             case STATE_HANDSHAKE_DONE: {
                 // 这里可以添加解析 RTMP Chunk 的逻辑
-                handleRtmpChunk(conn, readBuffer);
+                if(!chunkreassembler_) {
+                    chunkreassembler_ = std::make_unique<ChunkReassembler>();
+                    chunkreassembler_->setProcessMessageCallback(
+                        [this, conn](const RtmpMessageHeader& header, const std::string& payload) {
+                            #ifdef  LITE_LIVE_TESTING
+                                countCallbackNum++;
+                            #endif
+                            this->processFullMessage(conn, header, payload);
+                        }
+                    );
+                }
+                if(!chunkreassembler_->feed(readBuffer)) {
+                    conn->CloseConnection();
+                }
                 continueParsing = false;
                 break;
             }
@@ -81,150 +99,6 @@ void RtmpSession::sendS0S1S2(TcpConnection* conn, const std::string& c1) {
 }
 bool RtmpSession::verifyC2(const std::string& c2, const std::string& s1) {
     return c2 == s1;
-}
-
-void RtmpSession::handleRtmpChunk(TcpConnection* conn, std::string& readBuffer) {
-    while (!readBuffer.empty()) {
-        // 1.解析Basic Header(假设只有一个字节)
-        uint8_t basicHeader = readBuffer[0];
-        uint8_t fmt = (basicHeader >> 6) & 0x03;
-        uint8_t csid = basicHeader & 0x3F;
-        std::cout << "Parsed RTMP Chunk - fmt: " << (int)fmt << ", csid: " << (int)csid << std::endl;
-
-        int headerSize = 1; // Basic header 长度
-
-        // 根据 fmt 判断 Message Header 的长度
-        int msgHeaderSize = 0;
-        if (fmt == 0)
-            msgHeaderSize = 11;
-        else if (fmt == 1)
-            msgHeaderSize = 7;
-        else if (fmt == 2)
-            msgHeaderSize = 3;
-        else if (fmt == 3)
-            msgHeaderSize = 0;
-        // 如果连协议头都不够，说明网络包被腰斩了，直接返回等下一次 epoll
-        if (readBuffer.size() < headerSize + msgHeaderSize) {
-            return;
-        }
-        // 2. 提取或创建该 CSID 的上下文状态
-        RtmpChunkContext& ctx = chunkContexts_[csid];
-
-        // 3. 根据 fmt 解析并更新上下文状态
-        if (fmt == 0) {
-            if (readBuffer.size() < headerSize + 11) {
-                return; // 等待读取完整的 Message Header
-            }
-            // 解析 Message Header (11 字节)
-            //// RTMP 是大端字节序 (Network Byte Order)
-            ctx.header.timestamp = ((static_cast<uint8_t>(readBuffer[headerSize]) << 16) |
-                                    (static_cast<uint8_t>(readBuffer[headerSize + 1]) << 8) |
-                                    static_cast<uint8_t>(readBuffer[headerSize + 2]));
-            ctx.header.messageLength = ((static_cast<uint8_t>(readBuffer[headerSize + 3]) << 16) |
-                                        (static_cast<uint8_t>(readBuffer[headerSize + 4]) << 8) |
-                                        static_cast<uint8_t>(readBuffer[headerSize + 5]));
-            ctx.header.messageTypeId = static_cast<uint8_t>(readBuffer[headerSize + 6]);
-            ctx.header.messageStreamId = ((static_cast<uint8_t>(readBuffer[headerSize + 7]) << 24) |
-                                          (static_cast<uint8_t>(readBuffer[headerSize + 8]) << 16) |
-                                          (static_cast<uint8_t>(readBuffer[headerSize + 9]) << 8) |
-                                          static_cast<uint8_t>(readBuffer[headerSize + 10]));
-            ctx.timestampDelta = 0; // fmt=0 的 Chunk 是新消息，时间增量重置为 0
-            // 清空缓冲区，准备迎接新数据
-            ctx.payload.clear();
-            ctx.bytesRead = 0;
-            std::cout << "Parsed RTMP Message Header - timestamp: " << ctx.header.timestamp
-                      << ", messageLength: " << ctx.header.messageLength
-                      << ", messageTypeId: " << (int)ctx.header.messageTypeId
-                      << ", messageStreamId: " << ctx.header.messageStreamId << std::endl;
-
-        } else if (fmt == 1) {
-            if (readBuffer.size() < headerSize + 7) {
-                return; // 等待读取完整的 Message Header
-            }
-            // 解析 Message Header (7 字节)
-            //// ！！！注意：这里解析出来的是 Delta (时间差) ！！！
-            uint32_t delta = ((static_cast<uint8_t>(readBuffer[headerSize]) << 16) |
-                              (static_cast<uint8_t>(readBuffer[headerSize + 1]) << 8) |
-                              static_cast<uint8_t>(readBuffer[headerSize + 2]));
-            ctx.timestampDelta = delta;    // 记住这个流的最新频率
-            ctx.header.timestamp += delta; // 【核心修复】累加到绝对时间戳上！
-            ctx.header.messageLength = ((static_cast<uint8_t>(readBuffer[headerSize + 3]) << 16) |
-                                        (static_cast<uint8_t>(readBuffer[headerSize + 4]) << 8) |
-                                        static_cast<uint8_t>(readBuffer[headerSize + 5]));
-            ctx.header.messageTypeId = static_cast<uint8_t>(readBuffer[headerSize + 6]);
-            // 清空缓冲区
-            ctx.payload.clear();
-            ctx.bytesRead = 0;
-            // 注意：fmt=1 的 Chunk 没有 messageStreamId 字段，沿用上一个 Chunk 的值
-            std::cout << "Parsed RTMP Message Header (fmt=1) - timestamp: " << ctx.header.timestamp
-                      << ", messageLength: " << ctx.header.messageLength
-                      << ", messageTypeId: " << (int)ctx.header.messageTypeId
-                      << ", messageStreamId: " << ctx.header.messageStreamId << std::endl;
-        } else if (fmt == 2) {
-            if (readBuffer.size() < headerSize + 3) {
-                return; // 等待读取完整的 Message Header
-            }
-            // 解析 Message Header (3 字节)
-            uint32_t delta = ((static_cast<uint8_t>(readBuffer[headerSize]) << 16) |
-                              (static_cast<uint8_t>(readBuffer[headerSize + 1]) << 8) |
-                              static_cast<uint8_t>(readBuffer[headerSize + 2]));
-            ctx.timestampDelta = delta;
-            ctx.header.timestamp += delta; // 【核心修复】累加到绝对时间戳上！
-            // fmt=2 的 Chunk 没有 messageLength、messageTypeId 和 messageStreamId 字段，沿用上一个 Chunk 的值
-            // 清空缓冲区
-            ctx.payload.clear();
-            ctx.bytesRead = 0;
-            std::cout << "Parsed RTMP Message Header (fmt=2) - timestamp: " << ctx.header.timestamp
-                      << ", messageLength: " << ctx.header.messageLength
-                      << ", messageTypeId: " << (int)ctx.header.messageTypeId
-                      << ", messageStreamId: " << ctx.header.messageStreamId << std::endl;
-
-        } else if (fmt == 3) {
-            // 情况A：如果前一个包已经收满了，那这也是个新包（只是所有属性全抄上一个，常用于音视频连续帧）
-            if (ctx.bytesRead >= ctx.header.messageLength) {
-                // 情况A：这是一个全新的音视频帧！它不仅复用上一个包的所有属性，还复用时间差！
-                ctx.header.timestamp += ctx.timestampDelta; // 【核心修复】即使没传时间，也要乖乖累加！
-                ctx.bytesRead = 0;
-                ctx.payload.clear();
-            }
-            // 情况B：如果前一个包没收满（bytesRead < messageLength），那它就是后续的分片！
-            //  啥属性都不用改，直接往下走去读取数据。
-        }
-
-        // 4. 精确计算本次应该从 buffer 中挖取多长的数据
-        uint32_t bytesLeft = ctx.header.messageLength - ctx.bytesRead;
-        // 本次能读的数据，绝不能超过剩余没读完的数据，也不能超过 ChunkSize 上限
-        uint32_t currentChunkPayloadSize = std::min(bytesLeft, inChunkSize_);
-        // for(size_t i = 0; i < readBuffer.size(); ++i) {
-        //     printf("%02X ", static_cast<uint8_t>(readBuffer[i]));
-        //     if((i + 1) % 16 == 0)            printf("\n");
-        // }
-        // 5. 再次安全检查：头 + 本次该读的数据量，收齐了吗？
-        if (readBuffer.size() < headerSize + msgHeaderSize + currentChunkPayloadSize) {
-            return; // 连这个小碎片的 payload 都没收齐，继续等网络！
-        }
-
-        // 6. 提取这段 Payload 并拼接到我们的状态机缓存中
-        int payloadOffset = headerSize + msgHeaderSize;
-        ctx.payload.append(readBuffer, payloadOffset, currentChunkPayloadSize);
-        ctx.bytesRead += currentChunkPayloadSize;
-
-        // 7. 从 buffer 中移除我们刚刚处理的这段数据
-        readBuffer.erase(0, headerSize + msgHeaderSize + currentChunkPayloadSize);
-
-        // 8.判断这个消息是否已经收齐了
-        if (ctx.bytesRead == ctx.header.messageLength) {
-            std::cout << "\n>>> [Success] Reassembled Full RTMP Message! CSID: " << (int)csid
-                      << ", TypeID: " << (int)ctx.header.messageTypeId << ", TotalLength: " << ctx.payload.size()
-                      << " bytes\n";
-            // std::cout << "payload: " << ctx.payload << std::endl;
-            processFullMessage(conn, ctx.header, ctx.payload);
-
-        } else {
-            std::cout << "--- [Partial] Chunk read. CSID: " << (int)csid << " Current Progress: " << ctx.bytesRead
-                      << " / " << ctx.header.messageLength << "\n";
-        }
-    }
 }
 
 void RtmpSession::processFullMessage(TcpConnection* conn, const RtmpMessageHeader& header, const std::string& payload) {
@@ -403,9 +277,9 @@ void RtmpSession::processFullMessage(TcpConnection* conn, const RtmpMessageHeade
     } else if (header.messageTypeId == 1) {
         if (payload.size() >= 4) {
             uint32_t clientChunkSize = static_cast<uint8_t>(payload[0] << 24) |
-                                       (static_cast<uint8_t>(payload[1]) << 16) |
-                                       (static_cast<uint8_t>(payload[2]) << 8) | static_cast<uint8_t>(payload[3]);
-            this->inChunkSize_ = clientChunkSize;
+                                       (static_cast<uint8_t>(payload[1] << 16) |
+                                       (static_cast<uint8_t>(payload[2]) << 8) | static_cast<uint8_t>(payload[3]));
+            if(chunkreassembler_) chunkreassembler_->setChunkSize(clientChunkSize);
         }
 
     } else if (header.messageTypeId == 8 || header.messageTypeId == 9 || header.messageTypeId == 18) {

@@ -25,6 +25,7 @@ set(COMMON_SOURCES
     src/HttpFlvSession.cpp
     src/RtmpSession.cpp
     src/FlvReader.cpp
+    src/ChunkReassembler.cpp
 )
 #按OS选Poller 实现平台相关
 if(APPLE)
@@ -74,6 +75,7 @@ add_executable(ConnectionLifecycleTest
                     src/RtmpSession.cpp
                     src/HttpFlvSession.cpp
                     src/LiveServer.cpp
+                    src/ChunkReassembler.cpp
                     tests/ConnectionLifecycleTest.cpp)
 target_link_libraries(ConnectionLifecycleTest Poller)
 add_test(NAME ConnectionLifecycle COMMAND ConnectionLifecycleTest)
@@ -88,6 +90,7 @@ add_executable(RtmpHandshakeTest
                     src/RtmpSession.cpp
                     src/HttpFlvSession.cpp
                     src/LiveServer.cpp
+                    src/ChunkReassembler.cpp
                     tests/RtmpHandshakeTest.cpp)
 target_link_libraries(RtmpHandshakeTest Poller)
 add_test(NAME RtmpHandshake COMMAND RtmpHandshakeTest)
