@@ -98,3 +98,17 @@ set_tests_properties(RtmpHandshake PROPERTIES
     TIMEOUT 10
     LABELS "contract"
 )
+
+add_executable(RtmpChunkTest
+                    src/TcpConnection.cpp
+                    src/RtmpSession.cpp
+                    src/HttpFlvSession.cpp
+                    src/LiveServer.cpp
+                    src/ChunkReassembler.cpp
+                    tests/RtmpChunkTest.cpp)
+target_link_libraries(RtmpChunkTest Poller)
+add_test(NAME RtmpChunk COMMAND RtmpChunkTest)
+set_tests_properties(RtmpChunk PROPERTIES
+    TIMEOUT 10
+    LABELS "contract"
+)

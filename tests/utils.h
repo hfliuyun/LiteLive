@@ -92,5 +92,57 @@ static std::string drainPeer(int fd) {
     }
     return out;
 }
+// 构造 1 字节 Basic Header
+static uint8_t makeBasicHeader(uint8_t fmt, uint8_t csid) {
+    return static_cast<uint8_t>(fmt << 6| csid & 0x3f);
+}
+//构造 fmt0 的 11 字节 Message Header
+static std::string makeMessageHeaderFmt0(uint32_t ts, uint32_t len, uint8_t type, uint32_t streamId) {
+    std::string h;
+    h.push_back(static_cast<char>((ts >> 16) & 0xFF));
+    h.push_back(static_cast<char>((ts >> 8) & 0xFF));
+    h.push_back(static_cast<char>(ts & 0xFF));
+    h.push_back(static_cast<char>((len >> 16) & 0xFF));
+    h.push_back(static_cast<char>((len >> 8) & 0xFF));
+    h.push_back(static_cast<char>(len & 0xFF));
+    h.push_back(static_cast<char>(type));
+    // streamId 小端（当前代码读的是大端，这里先对齐写入侧 RtmpSession.cpp:730-734）
+    h.push_back(static_cast<char>(streamId & 0xFF));
+    h.push_back(static_cast<char>((streamId >> 8) & 0xFF));
+    h.push_back(static_cast<char>((streamId >> 16) & 0xFF));
+    h.push_back(static_cast<char>((streamId >> 24) & 0xFF));
+    return h;
+}
+
+// 构造 fmt1 的 7 字节 Message Header
+static std::string makeMsgHeaderFmt1(uint32_t delta, uint32_t len, uint8_t type) {
+    std::string h;
+    h.push_back(static_cast<char>((delta >> 16) & 0xFF));
+    h.push_back(static_cast<char>((delta >> 8) & 0xFF));
+    h.push_back(static_cast<char>(delta & 0xFF));
+    h.push_back(static_cast<char>((len >> 16) & 0xFF));
+    h.push_back(static_cast<char>((len >> 8) & 0xFF));
+    h.push_back(static_cast<char>(len & 0xFF));
+    h.push_back(static_cast<char>(type));
+    return h;
+}
+
+// 构造 fmt2 的 3 字节 Message Header
+static std::string makeMsgHeaderFmt2(uint32_t delta) {
+    std::string h;
+    h.push_back(static_cast<char>((delta >> 16) & 0xFF));
+    h.push_back(static_cast<char>((delta >> 8) & 0xFF));
+    h.push_back(static_cast<char>(delta & 0xFF));
+    return h;
+}
+
+// 组装一个完整 chunk
+static std::string makeChunk(uint8_t fmt, uint8_t csid, const std::string& msgHeader, const std::string& payload) {
+    std::string chunk;
+    chunk.push_back(static_cast<char>(makeBasicHeader(fmt, csid)));
+    chunk.append(msgHeader);
+    chunk.append(payload);
+    return chunk;
+}
 
 #endif
