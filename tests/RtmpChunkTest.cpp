@@ -343,6 +343,21 @@ static void testCase14_ExternTimestampFlagResetsBetweenMessages() {
     CHECK(ctxC->payload == std::string(10, '\xEE'));
 }
 
+
+static void testCase15_MessageStreamId_LittleEndian() {
+    //锁小端，防止改回大端
+    auto ctx = makeCtx();
+    std::string chunk = makeChunk(0, 5 , makeMessageHeaderFmt0(0x00, 0x0A, 0x14, 0x01020304), std::string(10,'\xAA'));
+    std::string buffer = kC0C1 + kC2 + chunk;
+    ctx.session->onMessage(ctx.conn.get(), buffer);
+    CHECK(ctx.session->getCountProcessMessage() == 1);
+    auto chunkctx = ctx.session->getChunkContext(5);
+    CHECK(chunkctx != std::nullopt);
+    CHECK(chunkctx->header.messageStreamId == 0x01020304);
+    CHECK(chunkctx->payload == std::string(10,'\xAA'));
+    CHECK(buffer.empty());
+}
+
 int main() {
     testCase1_Fmt0_SmallMsg_SingleChunk();
     testCase2_Fmt0ThenFmt1_TwoDeliveries();
@@ -358,6 +373,7 @@ int main() {
     testCase12_ExtTimestampFmt0_ThenFmt3Continuation();
     testCase13_ExtTimestampTruncated_WaitsForMoreData();
     testCase14_ExternTimestampFlagResetsBetweenMessages();
+    testCase15_MessageStreamId_LittleEndian();
     if (g_fails == 0) { std::cout << "RtmpChunk 测试全部通过\n"; return 0; }
     std::cerr << g_fails << " 条契约检查失败\n";
     return 1;
