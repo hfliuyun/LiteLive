@@ -21,6 +21,7 @@ struct RtmpChunkContext {
     std::string payload;         // 用于将各个 Chunk 碎片拼接起来的缓冲区
     uint32_t bytesRead = 0;      // 这个 Message 已经接收了多少字节
     uint32_t timestampDelta = 0; // <--- 新增：用来记住这个通道的时间增量
+    bool externTimestamp = false;
 };
 
 

@@ -59,8 +59,11 @@ bool  ChunkReassembler::feed(std::string &readBuffer) {
                                                 static_cast<uint8_t>(readBuffer[headerSize + 2]);
             }
             uint8_t exTimeLength = 0;
-            if(fmt != 3 && ts_flag == 0xFFFFFF) {
+            if(fmt!=3 &&ts_flag == 0xFFFFFF) {
                 exTimeLength = 4;
+                ctx.externTimestamp = true;
+            } else if(fmt !=3) {
+                ctx.externTimestamp = false;
             }
             msgHeaderSize += exTimeLength;
 
@@ -151,10 +154,18 @@ bool  ChunkReassembler::feed(std::string &readBuffer) {
                         << ", messageStreamId: " << ctx.header.messageStreamId << std::endl;
 
             } else if (fmt == 3) {
+                if(ctx.externTimestamp && readBuffer.size() < headerSize + 4) return true;
                 // 情况A：如果前一个包已经收满了，那这也是个新包（只是所有属性全抄上一个，常用于音视频连续帧）
+                if(ctx.externTimestamp) {
+                    ctx.timestampDelta = static_cast<uint32_t>((static_cast<uint8_t>(readBuffer[headerSize]) << 24) |
+                                            (static_cast<uint8_t>(readBuffer[headerSize + 1]) << 16)) |
+                                            (static_cast<uint8_t>(readBuffer[headerSize + 2]) << 8) |
+                                            static_cast<uint8_t>(readBuffer[headerSize + 3]);
+                    msgHeaderSize += 4;
+                }
                 if (ctx.bytesRead >= ctx.header.messageLength) {
                     // 情况A：这是一个全新的音视频帧！它不仅复用上一个包的所有属性，还复用时间差！
-                    ctx.header.timestamp += ctx.timestampDelta; // 【核心修复】即使没传时间，也要乖乖累加！
+                    ctx.header.timestamp += ctx.timestampDelta;
                     ctx.bytesRead = 0;
                     ctx.payload.clear();
                 }

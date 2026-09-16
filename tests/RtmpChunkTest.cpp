@@ -216,6 +216,50 @@ static void testCase11_ExtTimestampFmt2_DeltaAccumulates() {
     CHECK(buffer.empty());
 }
 
+static void testCase12_ExtTimestampFmt0_ThenFmt3Continuation() {
+    // 一条 256 字节的消息拆成两片。为什么是 256 而不是 20：
+    // chunk payload 长度 = min(chunkSize, 剩余消息长度)，inChunkSize_ 默认 128，
+    // 所以 messageLength 必须 > 128 才是合法分片。chunk 之间没有边界标记，
+    // 接收端全靠这个 min 规则反推分片位置——messageLength 取 20 的话，解析器会认为
+    // "这一片该有 20 字节"，直接把 chunk2 的 header 当续传 payload 吃掉。
+    // 这一条的关键问题：fmt3 那 4 字节扩展字段归谁？
+    auto ctx = makeCtx();
+    std::string chunk1 {};
+    chunk1.push_back(static_cast<char>(0x05));        // fmt=0, csid=5
+    chunk1 += std::string(3,'\xFF');                  // timestamp 哨兵
+    chunk1.push_back(static_cast<char>(0x00));        // extended timestamp = 0x00000001
+    chunk1.push_back(static_cast<char>(0x00));
+    chunk1.push_back(static_cast<char>(0x00));
+    chunk1.push_back(static_cast<char>(0x01));
+    chunk1.push_back(static_cast<char>(0x00));        // messageLength = 256
+    chunk1.push_back(static_cast<char>(0x01));
+    chunk1.push_back(static_cast<char>(0x00));
+    chunk1.push_back(static_cast<char>(0x14));        // messageTypeId = 0x14
+    chunk1 += std::string(4,'\x00');                  // messageStreamId = 0
+    chunk1 += std::string(128,'\xAA');                // 第 1 片：取满 chunkSize
+
+    std::string chunk2 {};
+    chunk2.push_back(static_cast<char>(0xC5));        // fmt=3, csid=5（0b11_000101；0x85 是 fmt=2）
+    chunk2.push_back(static_cast<char>(0x00));        // fmt3 的扩展时间戳
+    chunk2.push_back(static_cast<char>(0x00));
+    chunk2.push_back(static_cast<char>(0x00));
+    chunk2.push_back(static_cast<char>(0x01));
+    chunk2 += std::string(128,'\xBB');                // 第 2 片：剩余部分
+
+    std::string buffer = kC0C1 + kC2 + chunk1 + chunk2;
+    ctx.session->onMessage(ctx.conn.get(), buffer);
+
+    CHECK(ctx.session->getCountProcessMessage() == 1);
+    auto chunkctx = ctx.session->getChunkContext(5);
+    CHECK(chunkctx->header.timestamp == 0x000001);
+    CHECK(chunkctx->header.messageLength == 256);
+    // TODO: 关键断言。fmt3 那 4 字节扩展字段如果没被吃掉会去哪？payload 该是什么？
+    CHECK(chunkctx->payload == std::string(128, '\xAA')
+                              + std::string(128,  '\xBB'));
+    CHECK(chunkctx->bytesRead == 256);
+    CHECK(buffer.empty());
+}
+
 static void testCase13_ExtTimestampTruncated_WaitsForMoreData() {
     // 哨兵 0xFFFFFF 之后只给 2 字节，扩展字段没收齐。
     // 这一条锁的是：不够必须等，且等的时候要什么都没动。
@@ -240,6 +284,62 @@ static void testCase13_ExtTimestampTruncated_WaitsForMoreData() {
     CHECK(chunkctx->header.timestamp == 0);
 }
 
+static void testCase14_ExternTimestampFlagResetsBetweenMessages() {
+    // externTimestamp 挂在 ctx 上、跨 chunk 保留——因为 fmt3 自己没有时间戳字段，
+    // 只能沿用前一个 chunk 的判断。所以它只能由 fmt0/1/2 各自的时间戳字段决定。
+    // 若不复位：消息A 用哨兵置位后，消息B 的 fmt3 续片会被当成带扩展字段，
+    // 4 个 payload 字节被当扩展时间戳读走、msgHeaderSize 多算 4，消息B 永远凑不齐；
+    // 同一条 buffer 里后续消息的 header 字节还会被 B 的 payload 吞掉。
+    // 三条消息共用 CSID 5：A 带哨兵、B 不带、C 不带。三条都必须完整交付，
+    // 且 B 的 payload 尾字节必须是 DD。
+    auto ctx = makeCtx();
+
+    // 消息A：fmt0，timestamp=哨兵+扩展字段(=1)，len=10
+    std::string bufA = kC0C1 + kC2;
+    bufA.push_back(static_cast<char>(0x05));        // fmt=0, csid=5
+    bufA += std::string(3, '\xFF');                 // timestamp 哨兵 0xFFFFFF
+    bufA.push_back(static_cast<char>(0x00));        // extended timestamp = 0x00000001
+    bufA.push_back(static_cast<char>(0x00));
+    bufA.push_back(static_cast<char>(0x00));
+    bufA.push_back(static_cast<char>(0x01));
+    bufA.push_back(static_cast<char>(0x00));        // messageLength = 10
+    bufA.push_back(static_cast<char>(0x00));
+    bufA.push_back(static_cast<char>(0x0A));
+    bufA.push_back(static_cast<char>(0x14));        // messageTypeId = 20
+    bufA += std::string(4, '\x00');                 // messageStreamId = 0
+    bufA += std::string(10, '\xAA');
+    ctx.session->onMessage(ctx.conn.get(), bufA);
+    CHECK(ctx.session->getCountProcessMessage() == 1);
+    CHECK(bufA.empty());
+    auto ctxA = ctx.session->getChunkContext(5);
+    CHECK(ctxA->header.timestamp == 0x000001);
+    CHECK(ctxA->payload == std::string(10, '\xAA'));
+
+    // 消息B：fmt0，timestamp=500（无哨兵、无扩展字段），len=200 → 拆成 128+72
+    std::string bufB;
+    bufB += makeChunk(0, 5, makeMessageHeaderFmt0(500, 200, 20, 0), std::string(128, '\xCC'));
+    bufB.push_back(static_cast<char>(0xC5));        // fmt=3, csid=5，不带扩展字段
+    bufB += std::string(72, '\xDD');
+    ctx.session->onMessage(ctx.conn.get(), bufB);
+    CHECK(ctx.session->getCountProcessMessage() == 2);
+    CHECK(bufB.empty());
+    auto ctxB = ctx.session->getChunkContext(5);
+    CHECK(ctxB->header.timestamp == 500);
+    CHECK(ctxB->header.messageLength == 200);
+    // 关键断言：fmt3 不该跳 4 字节。payload 尾部必须是 DD
+    CHECK(ctxB->payload == std::string(128, '\xCC') + std::string(72, '\xDD'));
+    CHECK(ctxB->bytesRead == 200);
+
+    // 消息C：fmt0，timestamp=600，len=10，确认 B 没吞掉 C 的字节
+    std::string bufC = makeChunk(0, 5, makeMessageHeaderFmt0(600, 10, 20, 0), std::string(10, '\xEE'));
+    ctx.session->onMessage(ctx.conn.get(), bufC);
+    CHECK(ctx.session->getCountProcessMessage() == 3);
+    CHECK(bufC.empty());
+    auto ctxC = ctx.session->getChunkContext(5);
+    CHECK(ctxC->header.timestamp == 600);
+    CHECK(ctxC->payload == std::string(10, '\xEE'));
+}
+
 int main() {
     testCase1_Fmt0_SmallMsg_SingleChunk();
     testCase2_Fmt0ThenFmt1_TwoDeliveries();
@@ -252,7 +352,9 @@ int main() {
     testCase9_ExtendedCsid2Byte_AboveUint8();
     testCase10_ExtTimestampFmt1_DeltaAccumulates();
     testCase11_ExtTimestampFmt2_DeltaAccumulates();
+    testCase12_ExtTimestampFmt0_ThenFmt3Continuation();
     testCase13_ExtTimestampTruncated_WaitsForMoreData();
+    testCase14_ExternTimestampFlagResetsBetweenMessages();
     if (g_fails == 0) { std::cout << "RtmpChunk 测试全部通过\n"; return 0; }
     std::cerr << g_fails << " 条契约检查失败\n";
     return 1;
