@@ -1,4 +1,7 @@
+#include "LiveServer.h"
 #include "utils.h"
+#include <algorithm>
+#include <cstddef>
 #include <iostream>
 #include <optional>
 #include <string>
@@ -255,7 +258,7 @@ static void testCase12_ExtTimestampFmt0_ThenFmt3Continuation() {
     CHECK(chunkctx->header.messageLength == 256);
     // TODO: 关键断言。fmt3 那 4 字节扩展字段如果没被吃掉会去哪？payload 该是什么？
     CHECK(chunkctx->payload == std::string(128, '\xAA')
-                              + std::string(128,  '\xBB'));
+                             + std::string(128,  '\xBB'));
     CHECK(chunkctx->bytesRead == 256);
     CHECK(buffer.empty());
 }
