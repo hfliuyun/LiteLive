@@ -1,5 +1,6 @@
 #include "ChunkReassembler.h"
 #include <algorithm>
+#include <cstdint>
 #include <iostream>
 #include <string>
 

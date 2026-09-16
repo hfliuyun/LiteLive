@@ -6,6 +6,10 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 set(CMAKE_CXX_EXTENSIONS OFF)           # 纯标准 C++，不要 GNU 扩展——Linux/macOS 行为一致
 
+# 全项目默认警告：Poller、LiveLite、5 个 test、KqueueProbe 共 9 个 target 无条件继承，
+# 不再靠 target 名写白名单。不加 -Werror——当前还有 13 条唯一警告，直接收紧会让每个 target 编不过
+add_compile_options(-Wall -Wextra -Wpedantic)
+
 # CTest 注册表：等价 enable_testing()，额外提供 -DBUILD_TESTING=OFF 一键关掉测试构建
 include(CTest)
 
