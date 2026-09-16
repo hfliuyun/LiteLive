@@ -165,6 +165,81 @@ static void testCase9_ExtendedCsid2Byte_AboveUint8() {
     CHECK(buffer.empty());
 }
 
+static void testCase10_ExtTimestampFmt1_DeltaAccumulates() {
+    auto ctx = makeCtx();
+    std::string chunk1= makeChunk(0, 5 , makeMessageHeaderFmt0(0x01, 0x0A, 0x14, 0x00), std::string(10,'\xAA'));
+    std::string chunk2{};
+    chunk2.push_back(static_cast<char>(0x45));
+    chunk2+=std::string(3,'\xFF');
+    chunk2.push_back(static_cast<char>(0x05));
+    chunk2+=std::string(3,'\xF3');
+    chunk2.push_back(static_cast<char>(0x00));chunk2.push_back(static_cast<char>(0x00));chunk2.push_back(static_cast<char>(0x0A));
+    chunk2.push_back(static_cast<char>(0x14));
+    chunk2+=std::string(10,'\xBB');
+    std::string buffer = kC0C1 + kC2 + chunk1 + chunk2;
+    ctx.session->onMessage(ctx.conn.get(), buffer);
+    CHECK(ctx.session->getCountProcessMessage() == 2);
+    auto chunkctx = ctx.session->getChunkContext(5);
+    CHECK(chunkctx->header.timestamp == 0x05F3F3F4);
+    CHECK(chunkctx->header.messageLength == 10);
+    CHECK(chunkctx->header.messageTypeId == 0x14);
+    CHECK(chunkctx->payload == std::string(10,'\xBB'));
+    CHECK(chunkctx->bytesRead == 10);
+    CHECK(buffer.empty());
+}
+
+static void testCase11_ExtTimestampFmt2_DeltaAccumulates() {
+    // fmt2 带扩展 delta。base 故意取非零（ts=2）：
+    // "扩展字段是 delta" 和 "扩展字段被当绝对值" 会算出不同的 timestamp，非零 base 才能切开这两条路。
+    auto ctx = makeCtx();
+    std::string chunk1 = makeChunk(0, 5, makeMessageHeaderFmt0(0x02, 0x0A, 0x14, 0x00), std::string(10,'\xCC'));
+    std::string chunk2 {};
+    chunk2.push_back(static_cast<char>(0x85));   // fmt=2, csid=5
+    chunk2 += std::string(3,'\xFF');             // timestamp delta 哨兵
+    chunk2.push_back(static_cast<char>(0x00));   // extended delta = 0x00050001
+    chunk2.push_back(static_cast<char>(0x05));
+    chunk2.push_back(static_cast<char>(0x00));
+    chunk2.push_back(static_cast<char>(0x01));
+    chunk2 += std::string(10,'\xEE');
+    std::string buffer = kC0C1 + kC2 + chunk1 + chunk2;
+    ctx.session->onMessage(ctx.conn.get(), buffer);
+
+    CHECK(ctx.session->getCountProcessMessage() == 2);
+    auto chunkctx = ctx.session->getChunkContext(5);
+    // TODO: 规范里 fmt2 的扩展字段装的是 delta 还是绝对时间戳？按此算出期望值
+    CHECK(chunkctx->header.timestamp == 0x050003);
+    // TODO: fmt2 的 header 只有时间字段，messageLength 和 messageTypeId 从哪来？
+    CHECK(chunkctx->header.messageLength == 10);
+    CHECK(chunkctx->header.messageTypeId == 0x14);
+    CHECK(chunkctx->payload == std::string(10, '\xEE'));
+    CHECK(chunkctx->bytesRead == 10);
+    CHECK(buffer.empty());
+}
+
+static void testCase13_ExtTimestampTruncated_WaitsForMoreData() {
+    // 哨兵 0xFFFFFF 之后只给 2 字节，扩展字段没收齐。
+    // 这一条锁的是：不够必须等，且等的时候要什么都没动。
+    auto ctx = makeCtx();
+    std::string chunk1 = makeChunk(0, 5, makeMessageHeaderFmt0(0x00, 0x0A, 0x14, 0x00), std::string(10,'\xCC'));
+    std::string chunk2 {};
+    chunk2.push_back(static_cast<char>(0x45));        // fmt=1, csid=5
+    chunk2 += std::string(3,'\xFF');                  // timestamp delta 哨兵
+    chunk2.push_back(static_cast<char>(0x00));        // 扩展字段只到第 2 字节
+    chunk2.push_back(static_cast<char>(0x00));
+    std::string buffer = kC0C1 + kC2 + chunk1 + chunk2;
+    ctx.session->onMessage(ctx.conn.get(), buffer);
+
+    // TODO: 交付了几条？chunk1 算不算一条？
+    CHECK(ctx.session->getCountProcessMessage() == 1);
+    // TODO: 半截 chunk 在 buffer 里的状态怎么断言？注意 buffer 前面本来还有 kC0C1+kC2
+    CHECK(buffer == chunk2);
+    auto chunkctx = ctx.session->getChunkContext(5);
+    // TODO: 半截 chunk 有没有污染已建立的上下文？
+    CHECK(chunkctx->payload == std::string(10,  '\xCC'));
+    CHECK(chunkctx->bytesRead == 10);
+    CHECK(chunkctx->header.timestamp == 0);
+}
+
 int main() {
     testCase1_Fmt0_SmallMsg_SingleChunk();
     testCase2_Fmt0ThenFmt1_TwoDeliveries();
@@ -175,6 +250,9 @@ int main() {
     testCase7_ExtendedCsid3Byte_AboveUint8();
     testCase8_ExtendedCsid3Byte_MaxRange();
     testCase9_ExtendedCsid2Byte_AboveUint8();
+    testCase10_ExtTimestampFmt1_DeltaAccumulates();
+    testCase11_ExtTimestampFmt2_DeltaAccumulates();
+    testCase13_ExtTimestampTruncated_WaitsForMoreData();
     if (g_fails == 0) { std::cout << "RtmpChunk 测试全部通过\n"; return 0; }
     std::cerr << g_fails << " 条契约检查失败\n";
     return 1;

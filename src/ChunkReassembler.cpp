@@ -52,25 +52,42 @@ bool  ChunkReassembler::feed(std::string &readBuffer) {
                 it = chunkContexts_.emplace(csid,RtmpChunkContext{}).first;
             }
             RtmpChunkContext& ctx = it->second;
+            uint32_t ts_flag = 0;
+            if(fmt != 3) {
+                ts_flag = static_cast<uint32_t>((static_cast<uint8_t>(readBuffer[headerSize]) << 16) |
+                                                (static_cast<uint8_t>(readBuffer[headerSize + 1]) << 8)) |
+                                                static_cast<uint8_t>(readBuffer[headerSize + 2]);
+            }
+            uint8_t exTimeLength = 0;
+            if(fmt != 3 && ts_flag == 0xFFFFFF) {
+                exTimeLength = 4;
+            }
+            msgHeaderSize += exTimeLength;
 
             // 3. 根据 fmt 解析并更新上下文状态
             if (fmt == 0) {
-                if (readBuffer.size() < headerSize + 11) {
+                if (readBuffer.size() < headerSize + 11 + exTimeLength) {
                     return true; // 等待读取完整的 Message Header
                 }
                 // 解析 Message Header (11 字节)
                 //// RTMP 是大端字节序 (Network Byte Order)
-                ctx.header.timestamp = ((static_cast<uint8_t>(readBuffer[headerSize]) << 16) |
-                                        (static_cast<uint8_t>(readBuffer[headerSize + 1]) << 8) |
-                                        static_cast<uint8_t>(readBuffer[headerSize + 2]));
-                ctx.header.messageLength = ((static_cast<uint8_t>(readBuffer[headerSize + 3]) << 16) |
-                                            (static_cast<uint8_t>(readBuffer[headerSize + 4]) << 8) |
-                                            static_cast<uint8_t>(readBuffer[headerSize + 5]));
-                ctx.header.messageTypeId = static_cast<uint8_t>(readBuffer[headerSize + 6]);
-                ctx.header.messageStreamId = static_cast<uint8_t>(readBuffer[headerSize + 7]) |
-                                            (static_cast<uint8_t>(readBuffer[headerSize + 8]) << 8) |
-                                            (static_cast<uint8_t>(readBuffer[headerSize + 9]) << 16) |
-                                            (static_cast<uint8_t>(readBuffer[headerSize + 10]) << 24);
+                if(exTimeLength) {
+                    ctx.header.timestamp = static_cast<uint32_t>((static_cast<uint8_t>(readBuffer[headerSize+3]) << 24) |
+                                            (static_cast<uint8_t>(readBuffer[headerSize + 4]) << 16)) |
+                                            (static_cast<uint8_t>(readBuffer[headerSize + 5]) << 8) |
+                                            static_cast<uint8_t>(readBuffer[headerSize + 6]);
+                }
+                else {
+                    ctx.header.timestamp = ts_flag;
+                }
+                ctx.header.messageLength = ((static_cast<uint8_t>(readBuffer[headerSize +exTimeLength+ 3]) << 16) |
+                                            (static_cast<uint8_t>(readBuffer[headerSize +exTimeLength+ 4]) << 8) |
+                                            static_cast<uint8_t>(readBuffer[headerSize  +exTimeLength+ 5]));
+                ctx.header.messageTypeId = static_cast<uint8_t>(readBuffer[headerSize + exTimeLength + 6]);
+                ctx.header.messageStreamId = static_cast<uint8_t>(readBuffer[headerSize + exTimeLength + 7]) |
+                                            (static_cast<uint8_t>(readBuffer[headerSize + exTimeLength + 8]) << 8) |
+                                            (static_cast<uint8_t>(readBuffer[headerSize + exTimeLength + 9]) << 16) |
+                                            (static_cast<uint8_t>(readBuffer[headerSize + exTimeLength + 10]) << 24);
                 ctx.timestampDelta = 0; // fmt=0 的 Chunk 是新消息，时间增量重置为 0
                 // 清空缓冲区，准备迎接新数据
                 ctx.payload.clear();
@@ -81,20 +98,25 @@ bool  ChunkReassembler::feed(std::string &readBuffer) {
                         << ", messageStreamId: " << ctx.header.messageStreamId << std::endl;
 
             } else if (fmt == 1) {
-                if (readBuffer.size() < headerSize + 7) {
+                if (readBuffer.size() < headerSize + 7 + exTimeLength) {
                     return true; // 等待读取完整的 Message Header
                 }
                 // 解析 Message Header (7 字节)
-                //// ！！！注意：这里解析出来的是 Delta (时间差) ！！！
-                uint32_t delta = ((static_cast<uint8_t>(readBuffer[headerSize]) << 16) |
-                                (static_cast<uint8_t>(readBuffer[headerSize + 1]) << 8) |
-                                static_cast<uint8_t>(readBuffer[headerSize + 2]));
-                ctx.timestampDelta = delta;    // 记住这个流的最新频率
-                ctx.header.timestamp += delta; // 【核心修复】累加到绝对时间戳上！
-                ctx.header.messageLength = ((static_cast<uint8_t>(readBuffer[headerSize + 3]) << 16) |
-                                            (static_cast<uint8_t>(readBuffer[headerSize + 4]) << 8) |
-                                            static_cast<uint8_t>(readBuffer[headerSize + 5]));
-                ctx.header.messageTypeId = static_cast<uint8_t>(readBuffer[headerSize + 6]);
+                if(exTimeLength) {
+                    ctx.timestampDelta = static_cast<uint32_t>((static_cast<uint8_t>(readBuffer[headerSize + 3]) << 24) |
+                                                                (static_cast<uint8_t>(readBuffer[headerSize + 4]) << 16)) |
+                                                                (static_cast<uint8_t>(readBuffer[headerSize + 5]) << 8) |
+                                                                 static_cast<uint8_t>(readBuffer[headerSize+6]);
+                } else {
+                //// ！！！注意：这里解析出来的是 Delta (时间差) ！！!
+                // 记住这个流的最新频率
+                    ctx.timestampDelta = ts_flag;
+                }
+                ctx.header.timestamp += ctx.timestampDelta; // 【核心修复】累加到绝对时间戳上！
+                ctx.header.messageLength = ((static_cast<uint8_t>(readBuffer[headerSize + exTimeLength +3]) << 16) |
+                                            (static_cast<uint8_t>(readBuffer[headerSize + exTimeLength+ 4]) << 8) |
+                                            static_cast<uint8_t>(readBuffer[headerSize + exTimeLength + 5]));
+                ctx.header.messageTypeId = static_cast<uint8_t>(readBuffer[headerSize + exTimeLength +6]);
                 // 清空缓冲区
                 ctx.payload.clear();
                 ctx.bytesRead = 0;
@@ -104,15 +126,21 @@ bool  ChunkReassembler::feed(std::string &readBuffer) {
                         << ", messageTypeId: " << (int)ctx.header.messageTypeId
                         << ", messageStreamId: " << ctx.header.messageStreamId << std::endl;
             } else if (fmt == 2) {
-                if (readBuffer.size() < headerSize + 3) {
+                if (readBuffer.size() < headerSize + 3 + exTimeLength) {
                     return true; // 等待读取完整的 Message Header
                 }
-                // 解析 Message Header (3 字节)
-                uint32_t delta = ((static_cast<uint8_t>(readBuffer[headerSize]) << 16) |
-                                (static_cast<uint8_t>(readBuffer[headerSize + 1]) << 8) |
-                                static_cast<uint8_t>(readBuffer[headerSize + 2]));
-                ctx.timestampDelta = delta;
-                ctx.header.timestamp += delta; // 【核心修复】累加到绝对时间戳上！
+                if(exTimeLength) {
+                    ctx.timestampDelta = static_cast<uint32_t>(
+                                    (static_cast<uint8_t>(readBuffer[headerSize + 3]) << 24) |
+                                    (static_cast<uint8_t>(readBuffer[headerSize + 4]) << 16)) |
+                                    static_cast<uint8_t>(readBuffer[headerSize + 5]) << 8 |
+                                    static_cast<uint8_t>(readBuffer[headerSize + 6]);
+                }
+                else {
+                    // 解析 Message Header (3 字节)
+                    ctx.timestampDelta= ts_flag;
+                }
+                ctx.header.timestamp += ctx.timestampDelta; // 【核心修复】累加到绝对时间戳上！
                 // fmt=2 的 Chunk 没有 messageLength、messageTypeId 和 messageStreamId 字段，沿用上一个 Chunk 的值
                 // 清空缓冲区
                 ctx.payload.clear();
