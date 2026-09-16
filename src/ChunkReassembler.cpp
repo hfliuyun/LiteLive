@@ -89,7 +89,7 @@ bool  ChunkReassembler::feed(std::string &readBuffer) {
                 ctx.header.messageTypeId = static_cast<uint8_t>(readBuffer[headerSize + exTimeLength + 6]);
                 ctx.header.messageStreamId = static_cast<uint8_t>(readBuffer[headerSize + exTimeLength + 7]) |
                                             (static_cast<uint8_t>(readBuffer[headerSize + exTimeLength + 8]) << 8) |
-                                            (static_cast<uint8_t>(readBuffer[headerSize + exTimeLength + 9]) << 16) |
+                                            (static_cast<uint8_t>(readBuffer[headerSize + exTimeLength +9]) << 16) |
                                             (static_cast<uint8_t>(readBuffer[headerSize + exTimeLength + 10]) << 24);
                 ctx.timestampDelta = 0; // fmt=0 的 Chunk 是新消息，时间增量重置为 0
                 // 清空缓冲区，准备迎接新数据
@@ -177,10 +177,6 @@ bool  ChunkReassembler::feed(std::string &readBuffer) {
             uint32_t bytesLeft = ctx.header.messageLength - ctx.bytesRead;
             // 本次能读的数据，绝不能超过剩余没读完的数据，也不能超过 ChunkSize 上限
             uint32_t currentChunkPayloadSize = std::min(bytesLeft, inChunkSize_);
-            // for(size_t i = 0; i < readBuffer.size(); ++i) {
-            //     printf("%02X ", static_cast<uint8_t>(readBuffer[i]));
-            //     if((i + 1) % 16 == 0)            printf("\n");
-            // }
             // 5. 再次安全检查：头 + 本次该读的数据量，收齐了吗？
             if (readBuffer.size() < headerSize + msgHeaderSize + currentChunkPayloadSize) {
                 return true; // 连这个小碎片的 payload 都没收齐，继续等网络！
@@ -193,7 +189,6 @@ bool  ChunkReassembler::feed(std::string &readBuffer) {
 
             // 7. 从 buffer 中移除我们刚刚处理的这段数据
             readBuffer.erase(0, headerSize + msgHeaderSize + currentChunkPayloadSize);
-
             // 8.判断这个消息是否已经收齐了
             if (ctx.bytesRead == ctx.header.messageLength) {
                 std::cout << "\n>>> [Success] Reassembled Full RTMP Message! CSID: " << (int)csid

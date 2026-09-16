@@ -35,7 +35,6 @@ void RtmpSession::onMessage(TcpConnection* conn, std::string& readBuffer) {
                     break; // 等待读取完整的 C0+C1
                 }
                 // 处理 C0+C1
-                char c0 = readBuffer[0];
                 std::string c1 = readBuffer.substr(1, kC1Size);
                 readBuffer.erase(0, kC0C1Size);
                 // 生成 S0+S1+S2
