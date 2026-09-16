@@ -6,13 +6,30 @@
 
 bool  ChunkReassembler::feed(std::string &readBuffer) {
         while (!readBuffer.empty()) {
-            // 1.解析Basic Header(假设只有一个字节)
-            uint8_t basicHeader = readBuffer[0];
-            uint8_t fmt = (basicHeader >> 6) & 0x03;
-            uint8_t csid = basicHeader & 0x3F;
+            // 1.解析Basic Header
+            uint8_t fmt = (readBuffer[0] >> 6) & 0x03;
+            uint8_t csid_marker = readBuffer[0] & 0x3F;
+            int headerSize; // Basic header 长度
+            if(csid_marker == 0) {
+                headerSize = 2;
+            } else if(csid_marker == 1) {
+                headerSize = 3;
+            } else {
+                headerSize = 1;
+            }
+            if(readBuffer.size() < headerSize) {
+                return true;
+            }
+            uint32_t csid;
+            if(csid_marker == 0) {
+                csid = static_cast<uint32_t>(static_cast<uint8_t>(readBuffer[1])) + 64;
+            } else if(csid_marker == 1) {
+                csid = static_cast<uint32_t>((static_cast<uint8_t>(readBuffer[2]) << 8
+                       |  static_cast<uint8_t>(readBuffer[1]))) + 64;
+            } else {
+                csid = csid_marker;
+            }
             std::cout << "Parsed RTMP Chunk - fmt: " << (int)fmt << ", csid: " << (int)csid << std::endl;
-
-            int headerSize = 1; // Basic header 长度
 
             // 根据 fmt 判断 Message Header 的长度
             int msgHeaderSize = 0;
