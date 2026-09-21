@@ -1,6 +1,7 @@
 // CHECK：不受 NDEBUG 影响，报错带文件行号，失败后继续跑
 #ifndef __RTMP_TEST_UTILS
 #define __RTMP_TEST_UTILS
+#include <cstddef>
 #include <cstdint>
 #include <string>
 #include <sys/socket.h>
@@ -145,4 +146,14 @@ static std::string makeChunk(uint8_t fmt, uint8_t csid, const std::string& msgHe
     return chunk;
 }
 
+
+static std::string hexStringToBytes(const std::string & hex) {
+    std::string bytes;
+    bytes.reserve(hex.size() / 2);
+    for(size_t i = 0; i < hex.size(); i+=2) {
+        uint8_t byte = static_cast<uint8_t>(std::stoi(hex.substr(i, 2), nullptr, 16));
+        bytes.push_back(byte);
+    }
+    return bytes;
+}
 #endif

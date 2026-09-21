@@ -30,6 +30,7 @@ set(COMMON_SOURCES
     src/RtmpSession.cpp
     src/FlvReader.cpp
     src/ChunkReassembler.cpp
+    src/Amf0Parser.cpp
 )
 #按OS选Poller 实现平台相关
 if(APPLE)
@@ -80,6 +81,7 @@ add_executable(ConnectionLifecycleTest
                     src/HttpFlvSession.cpp
                     src/LiveServer.cpp
                     src/ChunkReassembler.cpp
+                    src/Amf0Parser.cpp
                     tests/ConnectionLifecycleTest.cpp)
 target_link_libraries(ConnectionLifecycleTest Poller)
 add_test(NAME ConnectionLifecycle COMMAND ConnectionLifecycleTest)
@@ -95,6 +97,7 @@ add_executable(RtmpHandshakeTest
                     src/HttpFlvSession.cpp
                     src/LiveServer.cpp
                     src/ChunkReassembler.cpp
+                    src/Amf0Parser.cpp
                     tests/RtmpHandshakeTest.cpp)
 target_link_libraries(RtmpHandshakeTest Poller)
 add_test(NAME RtmpHandshake COMMAND RtmpHandshakeTest)
@@ -109,10 +112,27 @@ add_executable(RtmpChunkTest
                     src/HttpFlvSession.cpp
                     src/LiveServer.cpp
                     src/ChunkReassembler.cpp
+                    src/Amf0Parser.cpp
                     tests/RtmpChunkTest.cpp)
 target_link_libraries(RtmpChunkTest Poller)
 add_test(NAME RtmpChunk COMMAND RtmpChunkTest)
 set_tests_properties(RtmpChunk PROPERTIES
+    TIMEOUT 10
+    LABELS "contract"
+)
+
+
+add_executable(RtmpAmf0Test
+                    src/TcpConnection.cpp
+                    src/RtmpSession.cpp
+                    src/HttpFlvSession.cpp
+                    src/LiveServer.cpp
+                    src/ChunkReassembler.cpp
+                    src/Amf0Parser.cpp
+                    tests/RtmpAmf0Test.cpp)
+target_link_libraries(RtmpAmf0Test Poller)
+add_test(NAME RtmpAmf0 COMMAND RtmpAmf0Test)
+set_tests_properties(RtmpAmf0 PROPERTIES
     TIMEOUT 10
     LABELS "contract"
 )
