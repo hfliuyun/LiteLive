@@ -32,6 +32,9 @@ public:
     }
     int countCallbackNum = 0;
     int getCountProcessMessage() { return countCallbackNum;}
+    void handlePayload(TcpConnection* conn, const RtmpMessageHeader& header, const std::string& payload) {
+        processFullMessage(conn, header, payload);
+    }
 #endif
 
 private:

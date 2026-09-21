@@ -1,4 +1,5 @@
 #include "RtmpSession.h"
+#include "Amf0Parser.h"
 #include "ChunkReassembler.h"
 #include "FlvReader.h"
 #include "LiveStream.h"
@@ -102,43 +103,18 @@ bool RtmpSession::verifyC2(const std::string& c2, const std::string& s1) {
 
 void RtmpSession::processFullMessage(TcpConnection* conn, const RtmpMessageHeader& header, const std::string& payload) {
     if (header.messageTypeId == 20) {
-        if (payload.empty())
-            return;
-
-        int offset = 0; // 用一个游标来记录当前解析到 payload 的哪个位置了
-        // 1. 解析第一个元素：命令名称 (AMF0 String)
-        // 规范：0x02 (1字节) + 长度 (2字节大端) + 字符串内容
-        if (payload[offset] != 0x02) {
-            std::cerr << "Expected AMF0 String for command name, but got type: " << std::hex << (int)payload[offset]
-                      << std::dec << std::endl;
+        RtmpCommand cmd;
+        if(!Amf0Parser::parserCommand(reinterpret_cast<const uint8_t*>(payload.data()),
+                                      payload.size(), cmd)) {
+            std::cerr << "AMF0 解析失败，关闭连接\n";
+            conn->CloseConnection();   // 只置位 + 排队，不在此处销毁（Day 5）
             return;
         }
-        uint16_t strlen = (static_cast<uint8_t>(payload[offset + 1]) << 8) | static_cast<uint8_t>(payload[offset + 2]);
-        offset += 3; // 跳过类型和长度字段
-        if (offset + strlen > payload.size())
-            return;
-        std::string commandName = payload.substr(offset, strlen);
-        offset += strlen;
 
-        // 2. 解析第二个元素：Transaction ID (AMF0 Number)
-        // 规范：0x00 (1字节) + 8字节 IEEE 754 双精度浮点数
-        double transactionId = 0.0;
-        if (offset < payload.size() && payload[offset] != 0x00) {
-            std::cerr << "Expected AMF0 Number for transaction ID, but got type: " << std::hex << (int)payload[offset]
-                      << std::dec << std::endl;
-            return;
-        }
-        offset += 1; // 跳过类型
-        if (offset + 8 > payload.size())
-            return;
-        uint64_t val = 0;
-        for (int i = 0; i < 8; i++) {
-            val = (val << 8) | static_cast<uint8_t>(payload[offset + i]);
-        }
-        std::memcpy(&transactionId, &val, sizeof(transactionId));
-        offset += 8;
+        const double transactionId = cmd.transactionId;
+        std::string commandName = cmd.name;
+        std::cout << "\n>>> 收到 AMF0 命令: [" << cmd.name << "], 事务编号: " << transactionId << std::endl;
 
-        std::cout << "\n>>> 收到 AMF0 命令: [" << commandName << "], 事务编号: " << transactionId << std::endl;
 
         if (commandName == "connect") {
             std::cout << "Handling 'connect' command..." << std::endl;
@@ -173,8 +149,17 @@ void RtmpSession::processFullMessage(TcpConnection* conn, const RtmpMessageHeade
         } else if (commandName == "play") {
             std::cout << "Handling 'play' command..." << std::endl;
 
-            // TODO: 可以通过解析 payload 提取出流的名字（"test"），用于后续业务校验。
-            std::string streamName = "test"; // 同样先假设硬编码提取出了 "test"
+
+            if (cmd.args.size() < 3
+                || cmd.args[0].type != AmfValue::Type::Null
+                || cmd.args[1].type != AmfValue::Type::String
+                || cmd.args[2].type != AmfValue::Type::Number) {
+                conn->CloseConnection();
+                return;
+            }
+
+
+            std::string streamName = cmd.args[1].str;
             // 这里我们直接给客户端发送开始播放的响应包。
             // 1. 发送 User Control Message (Stream Begin, EventType=0, StreamID=1)
             std::string streamBeginPayload;
@@ -251,11 +236,18 @@ void RtmpSession::processFullMessage(TcpConnection* conn, const RtmpMessageHeade
         } else if (commandName == "publish") {
             std::cout << "Handling 'publish' command..." << std::endl;
             // 1. 从 payload 解析出流名字（比如 "test"）。
-            // TODO(解析逻辑和提取 connect 类似，通常在 payload 的靠后位置，先写死 "test" 测试)
-            std::string streamName = "test";
+                        // publish.args = [Null, String 流名, String 类型]
+            if (cmd.args.size() < 3
+                || cmd.args[0].type != AmfValue::Type::Null
+                || cmd.args[1].type != AmfValue::Type::String
+                || cmd.args[2].type != AmfValue::Type::String) {
+                conn->CloseConnection();
+                return;
+            }
             // 2. 将这个连接标记为正在推流 (isPublishing_ = true)，并把 streamName 存起来
-            this->isPublishing_ = true;
+            const std::string& streamName = cmd.args[1].str;
             streamName_ = streamName;
+            this->isPublishing_ = true;
 
             // 3. 在全局流表中创建这个流
             auto [it, inserted] = liveServer_->g_liveStreams.try_emplace(streamName);
@@ -507,7 +499,6 @@ void RtmpSession::sendPlayResponse(TcpConnection* conn) {
     std::cout << ">>> Sent 'onStatus' (NetStream.Play.Start) for play!" << std::endl;
 }
 
-void sendPublishResponse(TcpConnection* conn, double transIdFromClient);
 void RtmpSession::sendPublishResponse(TcpConnection* conn, double transIdFromClient) {
     std::string amf;
     // 1. 命令名: "onStatus"
@@ -518,7 +509,7 @@ void RtmpSession::sendPublishResponse(TcpConnection* conn, double transIdFromCli
 
     // 2. Transaction ID: 0.0 (play 命令的回应通常事务编号都是 0)
     amf.push_back(0);
-    auto transactionIdBytes = doubleToBigEndian(0.0);
+    auto transactionIdBytes = doubleToBigEndian(transIdFromClient);
     amf.append(reinterpret_cast<char*>(transactionIdBytes.data()), transactionIdBytes.size());
 
     // 3. Null
