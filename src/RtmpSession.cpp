@@ -298,14 +298,16 @@ void RtmpSession::processFullMessage(TcpConnection* conn, const RtmpMessageHeade
                 if (payload[1] == 0) {
                     stream.videoSequenceHeader = payload; // 缓存视频序列头
                 } else if (payload[1] == 1) {
+                    bool isI = (((static_cast<uint8_t>(payload[0]) >> 4) & 0x0F) == 1);
                     // 这是普通视频帧数据！判断是否为 I 帧 (FrameType == 1)
-                    if (((payload[0] >> 4) & 0x0F) == 1) {
+                    if (isI) {
                         // 【首屏秒开核心】：遇到新的 I 帧，说明上一个 GOP 结束，立刻清空缓存！
                         stream.gopCache.clear();
                         // std::cout << ">>> [GOP] 遇到视频 I 帧，已清空并开启新一轮 GOP 缓存！" << std::endl;
                     }
-                    // 把当前的视频帧（无论是 I 帧还是 P 帧）放入缓存
-                    stream.gopCache.push_back({header.messageTypeId, header.timestamp, payload});
+                    if (isI || !stream.gopCache.empty())
+                        // 非 I 帧仅在缓存已开张时跟随
+                        stream.gopCache.push_back({header.messageTypeId, header.timestamp, payload});
                 }
             }
         } else if (header.messageTypeId == 8) { // 音频
@@ -315,8 +317,10 @@ void RtmpSession::processFullMessage(TcpConnection* conn, const RtmpMessageHeade
                 if (payload[1] == 0) {
                     stream.audioSequenceHeader = payload;
                 } else {
-                    // 这是普通音频帧，直接放入缓存跟上视频的时间线
-                    stream.gopCache.push_back({header.messageTypeId, header.timestamp, payload});
+                    if (!stream.gopCache.empty()) {
+                        // 这是普通音频帧，直接放入缓存跟上视频的时间线
+                        stream.gopCache.push_back({header.messageTypeId, header.timestamp, payload});
+                    }
                 }
             }
         }
