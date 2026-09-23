@@ -136,3 +136,18 @@ set_tests_properties(RtmpAmf0 PROPERTIES
     TIMEOUT 10
     LABELS "contract"
 )
+
+add_executable(RtmpMultiStreamTest
+                    src/TcpConnection.cpp
+                    src/RtmpSession.cpp
+                    src/HttpFlvSession.cpp
+                    src/LiveServer.cpp
+                    src/ChunkReassembler.cpp
+                    src/Amf0Parser.cpp
+                    tests/RtmpMultiStreamTest.cpp)
+target_link_libraries(RtmpMultiStreamTest Poller)
+add_test(NAME RtmpMultiStream COMMAND RtmpMultiStreamTest)
+set_tests_properties(RtmpMultiStream PROPERTIES
+    TIMEOUT 10
+    LABELS "contract"
+)
