@@ -57,6 +57,10 @@ void TcpConnection::handleWrite() {
             if (errno == EINTR) {
                 continue;
             }
+            if (writeBuffer_.size() > kWriteQueueLimit) {
+                CloseConnection();
+                return;
+            }
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
                 // 内核缓冲区满，等下次 EPOLLOUT
                 liveServer_->poller()->EnableWrite(fd_);

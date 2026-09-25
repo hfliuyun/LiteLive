@@ -3,6 +3,7 @@
 
 #include "Session.h"
 #include <cerrno>
+#include <cstddef>
 #include <functional>
 #include <memory>
 #include <unistd.h>
@@ -18,6 +19,7 @@ private:
     std::shared_ptr<Session> session_;
     bool close_ = false;
     std::function<void(int)> onCloseCb;
+    static const size_t kWriteQueueLimit = 64*1024;
 
 public:
     TcpConnection(int fd, LiveServer* liveServer, std::shared_ptr<Session> session)
@@ -35,6 +37,10 @@ public:
     void setOnCloseCb(std::function<void(int)> cb) {
         onCloseCb = std::move(cb);
     }
+
+    #ifdef  LITE_LIVE_TESTING
+    size_t pendingBytes() { return writeBuffer_.size(); }
+    #endif
 };
 
 #endif //__TCPCONNECTION_H__
