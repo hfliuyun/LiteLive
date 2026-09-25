@@ -151,3 +151,17 @@ set_tests_properties(RtmpMultiStream PROPERTIES
     TIMEOUT 10
     LABELS "contract"
 )
+add_executable(BackpressureTest
+                    src/TcpConnection.cpp
+                    src/RtmpSession.cpp
+                    src/HttpFlvSession.cpp
+                    src/LiveServer.cpp
+                    src/ChunkReassembler.cpp
+                    src/Amf0Parser.cpp
+                    tests/BackpressureTest.cpp)
+target_link_libraries(BackpressureTest Poller)
+add_test(NAME Backpressure COMMAND BackpressureTest)
+set_tests_properties(Backpressure PROPERTIES
+    TIMEOUT 10
+    LABELS "contract"
+)
