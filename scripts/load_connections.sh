@@ -11,6 +11,7 @@
 set -u
 N=8
 T=10
+HOST="${HOST:-127.0.0.1}"   # 放 PORT 那一行旁边
 PORT="${PORT:-19351}"
 BIN="./build/LiveLite"
 
@@ -48,7 +49,7 @@ SECONDS=0
 # ---- stage=load ----
 PIDS=""
 for i in $(seq 1 $N); do
-    python3 scripts/load_sender.py "$PORT" "$T" "/tmp/load_$i.stat" &
+    python3 scripts/load_sender.py "$HOST" "$PORT" "$T" "/tmp/load_$i.stat" &
     PIDS="$PIDS $!"
 done
 wait $PIDS
