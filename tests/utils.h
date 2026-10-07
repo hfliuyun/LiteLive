@@ -17,7 +17,7 @@ static int g_fails = 0;
     std::cerr << __FILE__ << ":" << __LINE__ << " CHECK 失败: " #cond "\n"; \
     ++g_fails; } } while(0)
 // socketpair + 非阻塞：Poller 测试的标准夹具
-static bool makePair(int fds[2]) {
+[[maybe_unused]] static bool makePair(int fds[2]) {
     if (socketpair(AF_UNIX, SOCK_STREAM, 0, fds) != 0) return false;
     for(int i = 0; i < 2; ++i) {
         fcntl(fds[i], F_SETFL, fcntl(fds[i], F_GETFL, 0) | O_NONBLOCK);
@@ -40,7 +40,7 @@ static_assert(kFullSize == 3073, "C0C1+C2 必须恰好 3073 字节，不是 3072
 static_assert(kS0S1S2Size == 3073, "S0+S1+S2 必须恰好 3073 字节");
 
 // 构造 1536 字节的 C1/S1：time(4, 大端) + zero(4) + random(1528)
-static std::string makeC1(uint32_t timestamp, uint8_t randomFill) {
+[[maybe_unused]] static std::string makeC1(uint32_t timestamp, uint8_t randomFill) {
     std::string c1(kC1Size, '\0');
     c1[0] = static_cast<char>(timestamp >> 24);
     c1[1] = static_cast<char>(timestamp >> 16);
@@ -64,7 +64,7 @@ struct HsCtx {
     std::unique_ptr<TcpConnection> conn;
 };
 
-static HsCtx makeCtx() {
+[[maybe_unused]] static HsCtx makeCtx() {
     HsCtx ctx;
     ctx.server = std::make_unique<LiveServer>(0);
     CHECK(makePair(ctx.fds));
@@ -83,7 +83,7 @@ static HsCtx makeCtx() {
 }
 
 // 输出侧唯一观察点：把对端 socket 里已就绪的字节全部读走
-static std::string drainPeer(int fd) {
+[[maybe_unused]] static std::string drainPeer(int fd) {
     std::string out;
     char buf[4096];
     for (;;) {
@@ -95,10 +95,13 @@ static std::string drainPeer(int fd) {
 }
 // 构造 1 字节 Basic Header
 static uint8_t makeBasicHeader(uint8_t fmt, uint8_t csid) {
-    return static_cast<uint8_t>(fmt << 6| csid & 0x3f);
+    return static_cast<uint8_t>(fmt << 6| (csid & 0x3f));
 }
+
+
+
 //构造 fmt0 的 11 字节 Message Header
-static std::string makeMessageHeaderFmt0(uint32_t ts, uint32_t len, uint8_t type, uint32_t streamId) {
+[[maybe_unused]] static std::string makeMessageHeaderFmt0(uint32_t ts, uint32_t len, uint8_t type, uint32_t streamId) {
     std::string h;
     h.push_back(static_cast<char>((ts >> 16) & 0xFF));
     h.push_back(static_cast<char>((ts >> 8) & 0xFF));
@@ -116,7 +119,7 @@ static std::string makeMessageHeaderFmt0(uint32_t ts, uint32_t len, uint8_t type
 }
 
 // 构造 fmt1 的 7 字节 Message Header
-static std::string makeMsgHeaderFmt1(uint32_t delta, uint32_t len, uint8_t type) {
+[[maybe_unused]] static std::string makeMsgHeaderFmt1(uint32_t delta, uint32_t len, uint8_t type) {
     std::string h;
     h.push_back(static_cast<char>((delta >> 16) & 0xFF));
     h.push_back(static_cast<char>((delta >> 8) & 0xFF));
@@ -129,7 +132,7 @@ static std::string makeMsgHeaderFmt1(uint32_t delta, uint32_t len, uint8_t type)
 }
 
 // 构造 fmt2 的 3 字节 Message Header
-static std::string makeMsgHeaderFmt2(uint32_t delta) {
+[[maybe_unused]] static std::string makeMsgHeaderFmt2(uint32_t delta) {
     std::string h;
     h.push_back(static_cast<char>((delta >> 16) & 0xFF));
     h.push_back(static_cast<char>((delta >> 8) & 0xFF));
@@ -138,7 +141,7 @@ static std::string makeMsgHeaderFmt2(uint32_t delta) {
 }
 
 // 组装一个完整 chunk
-static std::string makeChunk(uint8_t fmt, uint8_t csid, const std::string& msgHeader, const std::string& payload) {
+[[maybe_unused]] static std::string makeChunk(uint8_t fmt, uint8_t csid, const std::string& msgHeader, const std::string& payload) {
     std::string chunk;
     chunk.push_back(static_cast<char>(makeBasicHeader(fmt, csid)));
     chunk.append(msgHeader);
@@ -147,7 +150,7 @@ static std::string makeChunk(uint8_t fmt, uint8_t csid, const std::string& msgHe
 }
 
 
-static std::string hexStringToBytes(const std::string & hex) {
+[[maybe_unused]] static std::string hexStringToBytes(const std::string & hex) {
     std::string bytes;
     bytes.reserve(hex.size() / 2);
     for(size_t i = 0; i < hex.size(); i+=2) {

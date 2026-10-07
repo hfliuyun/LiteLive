@@ -102,7 +102,7 @@ void HttpFlvSession::sendFlv(TcpConnection* conn, const std::string& path) {
     conn->send(content);
 }
 std::string HttpFlvSession::makeHttpHeader(int status, const std::string& statusText, const std::string& contentType,
-                                           size_t contentLength, const std::string& cacheControl, bool keepAlive) {
+                                           size_t /*contentLength*/, const std::string& cacheControl, bool keepAlive) {
     std::ostringstream oss;
     oss << "HTTP/1.1 " << status << " " << statusText << "\r\n"
         << "Content-Type: " << contentType << "\r\n"

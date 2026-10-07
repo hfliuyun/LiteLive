@@ -1,5 +1,6 @@
 #include "ChunkReassembler.h"
 #include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <iostream>
 #include <string>
@@ -9,7 +10,7 @@ bool  ChunkReassembler::feed(std::string &readBuffer) {
             // 1.解析Basic Header
             uint8_t fmt = (readBuffer[0] >> 6) & 0x03;
             uint8_t csid_marker = readBuffer[0] & 0x3F;
-            int headerSize; // Basic header 长度
+            size_t headerSize; // Basic header 长度
             if(csid_marker == 0) {
                 headerSize = 2;
             } else if(csid_marker == 1) {
@@ -32,7 +33,7 @@ bool  ChunkReassembler::feed(std::string &readBuffer) {
             std::cout << "Parsed RTMP Chunk - fmt: " << (int)fmt << ", csid: " << (int)csid << std::endl;
 
             // 根据 fmt 判断 Message Header 的长度
-            int msgHeaderSize = 0;
+            size_t msgHeaderSize = 0;
             if (fmt == 0)
                 msgHeaderSize = 11;
             else if (fmt == 1)

@@ -263,9 +263,9 @@ void doExperiment3(){
         }
         total_calls++;
         if(nev > 0) {
-            if(event.ident == fds[0]) {
+            if(event.ident == static_cast<uintptr_t>(fds[0])) {
                 level_trigger_count++;
-            } else if(event.ident == fds[1]) {
+            } else if(event.ident == static_cast<uintptr_t>(fds[1])) {
                 edge_trigger_count++;
             }
         }
