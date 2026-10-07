@@ -22,7 +22,7 @@ include_directories(include)
 
 # 平台无关源文件
 set(COMMON_SOURCES
-    src/HLS_Server.cpp
+    src/main.cpp
     src/HttpHlsSession.cpp
     src/LiveServer.cpp
     src/TcpConnection.cpp
