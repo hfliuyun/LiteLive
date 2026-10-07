@@ -20,9 +20,9 @@ endif()
 # Include directories
 include_directories(include)
 
+
 # 平台无关源文件
-set(COMMON_SOURCES
-    src/main.cpp
+set(CORE_SOURCES
     src/HttpHlsSession.cpp
     src/LiveServer.cpp
     src/TcpConnection.cpp
@@ -46,9 +46,13 @@ endif()
 add_library(Poller STATIC ${POLLER_SOURCES})
 target_include_directories(Poller PUBLIC include)
 
+add_library(LiteLiveCore STATIC ${CORE_SOURCES})
+target_include_directories(LiteLiveCore PUBLIC include)
+target_link_libraries(LiteLiveCore PUBLIC Poller)
+
 # 生成可执行文件
-add_executable(LiveLite  ${COMMON_SOURCES})
-target_link_libraries(LiveLite Poller)
+add_executable(LiveLite  src/main.cpp)
+target_link_libraries(LiveLite LiteLiveCore)
 
 # 生成测试可执行文件
 add_executable(PollerSmokeTest tests/PollerSmokeTest.cpp)
@@ -75,15 +79,8 @@ set_tests_properties(PollerContract PROPERTIES
     LABELS "contract"
 )
 
-add_executable(ConnectionLifecycleTest
-                    src/TcpConnection.cpp
-                    src/RtmpSession.cpp
-                    src/HttpFlvSession.cpp
-                    src/LiveServer.cpp
-                    src/ChunkReassembler.cpp
-                    src/Amf0Parser.cpp
-                    tests/ConnectionLifecycleTest.cpp)
-target_link_libraries(ConnectionLifecycleTest Poller)
+add_executable(ConnectionLifecycleTest tests/ConnectionLifecycleTest.cpp)
+target_link_libraries(ConnectionLifecycleTest LiteLiveCore)
 add_test(NAME ConnectionLifecycle COMMAND ConnectionLifecycleTest)
 set_tests_properties(ConnectionLifecycle PROPERTIES
     TIMEOUT 10
@@ -91,30 +88,16 @@ set_tests_properties(ConnectionLifecycle PROPERTIES
 )
 
 
-add_executable(RtmpHandshakeTest
-                    src/TcpConnection.cpp
-                    src/RtmpSession.cpp
-                    src/HttpFlvSession.cpp
-                    src/LiveServer.cpp
-                    src/ChunkReassembler.cpp
-                    src/Amf0Parser.cpp
-                    tests/RtmpHandshakeTest.cpp)
-target_link_libraries(RtmpHandshakeTest Poller)
+add_executable(RtmpHandshakeTest tests/RtmpHandshakeTest.cpp)
+target_link_libraries(RtmpHandshakeTest LiteLiveCore)
 add_test(NAME RtmpHandshake COMMAND RtmpHandshakeTest)
 set_tests_properties(RtmpHandshake PROPERTIES
     TIMEOUT 10
     LABELS "contract"
 )
 
-add_executable(RtmpChunkTest
-                    src/TcpConnection.cpp
-                    src/RtmpSession.cpp
-                    src/HttpFlvSession.cpp
-                    src/LiveServer.cpp
-                    src/ChunkReassembler.cpp
-                    src/Amf0Parser.cpp
-                    tests/RtmpChunkTest.cpp)
-target_link_libraries(RtmpChunkTest Poller)
+add_executable(RtmpChunkTest tests/RtmpChunkTest.cpp)
+target_link_libraries(RtmpChunkTest LiteLiveCore)
 add_test(NAME RtmpChunk COMMAND RtmpChunkTest)
 set_tests_properties(RtmpChunk PROPERTIES
     TIMEOUT 10
@@ -122,44 +105,23 @@ set_tests_properties(RtmpChunk PROPERTIES
 )
 
 
-add_executable(RtmpAmf0Test
-                    src/TcpConnection.cpp
-                    src/RtmpSession.cpp
-                    src/HttpFlvSession.cpp
-                    src/LiveServer.cpp
-                    src/ChunkReassembler.cpp
-                    src/Amf0Parser.cpp
-                    tests/RtmpAmf0Test.cpp)
-target_link_libraries(RtmpAmf0Test Poller)
+add_executable(RtmpAmf0Test tests/RtmpAmf0Test.cpp)
+target_link_libraries(RtmpAmf0Test LiteLiveCore)
 add_test(NAME RtmpAmf0 COMMAND RtmpAmf0Test)
 set_tests_properties(RtmpAmf0 PROPERTIES
     TIMEOUT 10
     LABELS "contract"
 )
 
-add_executable(RtmpMultiStreamTest
-                    src/TcpConnection.cpp
-                    src/RtmpSession.cpp
-                    src/HttpFlvSession.cpp
-                    src/LiveServer.cpp
-                    src/ChunkReassembler.cpp
-                    src/Amf0Parser.cpp
-                    tests/RtmpMultiStreamTest.cpp)
-target_link_libraries(RtmpMultiStreamTest Poller)
+add_executable(RtmpMultiStreamTest tests/RtmpMultiStreamTest.cpp)
+target_link_libraries(RtmpMultiStreamTest LiteLiveCore)
 add_test(NAME RtmpMultiStream COMMAND RtmpMultiStreamTest)
 set_tests_properties(RtmpMultiStream PROPERTIES
     TIMEOUT 10
     LABELS "contract"
 )
-add_executable(BackpressureTest
-                    src/TcpConnection.cpp
-                    src/RtmpSession.cpp
-                    src/HttpFlvSession.cpp
-                    src/LiveServer.cpp
-                    src/ChunkReassembler.cpp
-                    src/Amf0Parser.cpp
-                    tests/BackpressureTest.cpp)
-target_link_libraries(BackpressureTest Poller)
+add_executable(BackpressureTest tests/BackpressureTest.cpp)
+target_link_libraries(BackpressureTest LiteLiveCore)
 add_test(NAME Backpressure COMMAND BackpressureTest)
 set_tests_properties(Backpressure PROPERTIES
     TIMEOUT 10
